@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Signature Tool</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="lib/forge.min.js"></script>
+</head>
+<body>
+    <!-- Login Page -->
+    <div class="login-container" id="loginPage">
+        <div class="login-card">
+            <div class="login-header">
+                <h1>Digital Signature Tool</h1>
+                <p>Sign in to access your settings and keys</p>
+            </div>
+            <div class="login-input-group">
+                <label>Username</label>
+                <input type="text" id="username" placeholder="Enter your username">
+            </div>
+            <div class="login-input-group">
+                <label>Password</label>
+                <input type="password" id="password" placeholder="Enter your password">
+            </div>
+            <div class="login-buttons">
+                <button class="login-button primary" id="loginButton">Login</button>
+                <button class="login-button secondary" id="guestButton">Continue as Guest</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div class="app-container" id="mainApp">
+        <div class="sidebar">
+            <div class="app-title">
+                <h1>Digital Signature Tool</h1>
+                <p>Sign & Verify Files</p>
+            </div>
+            <nav class="nav-menu">
+                <div class="nav-item active" data-section="signing">
+                    <div class="nav-item-title">File Signing</div>
+                    <div class="nav-item-desc">Create digital signatures</div>
+                </div>
+                <div class="nav-item" data-section="verification">
+                    <div class="nav-item-title">Signature Verification</div>
+                    <div class="nav-item-desc">Verify file authenticity</div>
+                </div>
+                <div class="nav-item" data-section="settings">
+                    <div class="nav-item-title">Settings</div>
+                    <div class="nav-item-desc">Configure algorithms</div>
+                </div>
+            </nav>
+            <div class="user-info" id="userInfo" style="display: none;">
+                <div class="username" id="displayUsername"></div>
+                <button class="logout-button" id="logoutButton">Logout</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="header">
+                <h2 id="headerTitle">File Signing</h2>
+                <div class="subtitle" id="headerSubtitle">Create a digital signature for your file</div>
+            </div>
+
+            <div class="content-area">
+                <!-- File Signing Section -->
+                <div class="content-section active" id="signing-section">
+                    <div class="card">
+                        <div class="card-title">Select Files</div>
+                        
+                        <div class="input-group">
+                            <label>File to Sign</label>
+                            <div class="file-input-wrapper" id="fileToSignWrapper">
+                                <input type="file" id="fileToSign" />
+                                <div class="file-indicator">📄</div>
+                                <span class="file-text">Choose a file to sign...</span>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label>Private Key</label>
+                            <div class="input-with-button">
+                                <div class="file-input-wrapper" id="privateKeyWrapper">
+                                    <input type="file" id="privateKey" accept=".pem" />
+                                    <div class="file-indicator">🔑</div>
+                                    <span class="file-text">Choose your private key file...</span>
+                                </div>
+                                <button class="generate-key-button" id="generateKeyButton">+ Generate New</button>
+                            </div>
+                        </div>
+
+                        <button class="button" id="signButton">Sign File</button>
+
+                        <div class="progress" id="signingProgress">Processing...</div>
+
+                        <div class="info-box">
+                            <h3>Output Files</h3>
+                            <p>The signing process will generate a signature file (.sig) that can be shared with your file for verification.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Verification Section -->
+                <div class="content-section" id="verification-section">
+                    <div class="card">
+                        <div class="card-title">Select Files</div>
+                        
+                        <div class="input-group">
+                            <label>Received File</label>
+                            <div class="file-input-wrapper" id="fileToVerifyWrapper">
+                                <input type="file" id="fileToVerify" />
+                                <div class="file-indicator">📄</div>
+                                <span class="file-text">Choose the file to verify...</span>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label>Signature File</label>
+                            <div class="file-input-wrapper" id="signatureFileWrapper">
+                                <input type="file" id="signatureFile" accept=".sig" />
+                                <div class="file-indicator">📝</div>
+                                <span class="file-text">Choose the signature file (.sig)...</span>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label>Sender's Public Key</label>
+                            <div class="file-input-wrapper" id="publicKeyWrapper">
+                                <input type="file" id="publicKey" accept=".pem" />
+                                <div class="file-indicator">🔓</div>
+                                <span class="file-text">Choose the public key file...</span>
+                            </div>
+                        </div>
+
+                        <button class="button" id="verifyButton">Verify Signature</button>
+
+                        <div class="progress" id="verifyingProgress">Verifying...</div>
+
+                        <div class="result-box" id="verificationResult">
+                            <div class="result-status" id="resultStatus">VALID</div>
+                            <div class="result-message" id="resultMessage">The file is authentic and has not been modified</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Section -->
+                <div class="content-section" id="settings-section">
+                    <div class="card">
+                        <div class="card-title">Cryptography Settings</div>
+                        
+                        <div class="settings-section">
+                            <h3>Algorithm Configuration</h3>
+                            
+                            <div class="settings-group">
+                                <label>Hash Algorithm</label>
+                                <select id="hashAlgorithm">
+                                    <option value="sha256" selected>SHA-256</option>
+                                    <option value="sha384">SHA-384</option>
+                                    <option value="sha512">SHA-512</option>
+                                </select>
+                            </div>
+
+                            <div class="settings-group">
+                                <label>Signature Algorithm</label>
+                                <select id="signatureAlgorithm">
+                                    <option value="rsa" selected>RSA</option>
+                                    <option value="ecdsa">ECDSA</option>
+                                </select>
+                            </div>
+
+                            <div class="settings-group">
+                                <label>Key Size</label>
+                                <select id="keySize">
+                                    <option value="2048" selected>2048 bits</option>
+                                    <option value="3072">3072 bits</option>
+                                    <option value="4096">4096 bits</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="info-box">
+                            <h3>About These Settings</h3>
+                            <p>These settings determine the cryptographic algorithms used for signing and verification. SHA-256 with RSA-2048 provides strong security for most use cases.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generate Key Modal -->
+    <div class="modal-overlay" id="generateKeyModal">
+        <div class="modal">
+            <div id="modalForm">
+                <div class="modal-header">
+                    <h2>Generate Key Pair</h2>
+                    <p>Create a new public/private key pair</p>
+                </div>
+
+                <div class="modal-info">
+                    <strong>Current Settings:</strong><br>
+                    Algorithm: <span id="modalAlgorithm">RSA</span> | 
+                    Key Size: <span id="modalKeySize">2048</span> bits | 
+                    Hash: <span id="modalHash">SHA-256</span>
+                </div>
+
+                <div class="modal-input-group">
+                    <label>Key Name</label>
+                    <input type="text" id="keyName" placeholder="e.g., my-signature-key">
+                </div>
+
+                <div class="progress" id="keygenProgress">Generating keys... This may take a moment.</div>
+
+                <div class="modal-buttons">
+                    <button class="modal-button secondary" id="cancelGenerate">Cancel</button>
+                    <button class="modal-button primary" id="confirmGenerate">Generate</button>
+                </div>
+            </div>
+
+            <div class="modal-success" id="modalSuccess">
+                <div class="modal-success-icon">✓</div>
+                <h3>Key Pair Generated Successfully!</h3>
+                <p id="successMessage">Your private and public keys have been downloaded.</p>
+                <div class="modal-buttons">
+                    <button class="modal-button primary" id="closeSuccess">Done</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/crypto.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/signing.js"></script>
+    <script src="js/verification.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
