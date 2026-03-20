@@ -14,11 +14,13 @@ const logoutButton = document.getElementById('logoutButton');
 // Login button handler
 loginButton.addEventListener('click', () => {
     const username = document.getElementById('username').value;
-    if (username.trim()) {
-        currentUser = username;
-        displayUsername.textContent = `Logged in as: ${username}`;
-        userInfo.style.display = 'block';
+    if (!username.trim()) {
+        alert('Please enter a username');
+        return;
     }
+    currentUser = username;
+    displayUsername.textContent = `Logged in as: ${username}`;
+    userInfo.style.display = 'block';
     loginPage.style.display = 'none';
     mainApp.classList.add('active');
 });
