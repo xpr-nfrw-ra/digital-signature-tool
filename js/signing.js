@@ -30,9 +30,9 @@ generateKeyButton.addEventListener('click', () => {
     let keySizeDisplay = appSettings.keySize + ' bits';
     if (appSettings.signatureAlgorithm === 'ecdsa') {
         const curveNames = {
-            '256': 'P-256',
-            '384': 'P-384',
-            '521': 'P-521'
+            '2048': 'P-256',
+            '3072': 'P-384',
+            '4096': 'P-521'
         };
         keySizeDisplay = appSettings.keySize + ' bits (' + curveNames[appSettings.keySize] + ')';
     }
@@ -117,6 +117,7 @@ closeSuccess.addEventListener('click', () => {
         const textSpan = document.querySelector('#privateKeyWrapper .file-text');
         textSpan.textContent = 'generated_private.pem';
         textSpan.classList.add('selected-file');
+        generatedPrivateKey = null;
     }
 });
 
