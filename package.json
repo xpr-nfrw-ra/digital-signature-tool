@@ -1,0 +1,19 @@
+{
+  "name": "digital-signature-tool",
+  "version": "1.0.0",
+  "description": "Digital signature tool with HTTPS authentication",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "generate-certs": "node server/generate-certs.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.0",
+    "express-session": "^1.18.1",
+    "helmet": "^8.0.0"
+  },
+  "devDependencies": {
+    "node-forge": "^1.3.1"
+  }
+}
