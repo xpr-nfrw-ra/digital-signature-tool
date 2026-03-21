@@ -21,7 +21,17 @@
             </div>
             <div class="login-input-group">
                 <label>Password</label>
-                <input type="password" id="password" placeholder="Enter your password">
+                <div class="password-wrapper">
+                    <input type="password" id="password" placeholder="Enter your password">
+                    <button type="button" class="password-toggle" data-target="password" aria-label="Toggle password visibility">👁</button>
+                </div>
+            </div>
+            <div class="login-input-group" id="confirmPasswordGroup" style="display: none;">
+                <label>Confirm Password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="confirmPassword" placeholder="Re-enter your password">
+                    <button type="button" class="password-toggle" data-target="confirmPassword" aria-label="Toggle password visibility">👁</button>
+                </div>
             </div>
             <div class="login-error" id="loginError" style="display: none;"></div>
             <div class="login-buttons">
