@@ -14,6 +14,21 @@ const logoutButton = document.getElementById('logoutButton');
 const loginError = document.getElementById('loginError');
 const toggleAuthLink = document.getElementById('toggleAuthLink');
 const loginTitle = document.querySelector('.login-header p');
+const confirmPasswordGroup = document.getElementById('confirmPasswordGroup');
+
+// Password visibility toggles
+document.querySelectorAll('.password-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const input = document.getElementById(btn.dataset.target);
+        if (input.type === 'password') {
+            input.type = 'text';
+            btn.textContent = '🙈';
+        } else {
+            input.type = 'password';
+            btn.textContent = '👁';
+        }
+    });
+});
 
 function showApp(username) {
     currentUser = username;
@@ -37,14 +52,22 @@ function hideError() {
 function setRegisterMode(register) {
     isRegisterMode = register;
     hideError();
+    const confirmInput = document.getElementById('confirmPassword');
+    confirmInput.value = '';
+    confirmInput.type = 'password';
+    document.querySelector('[data-target="confirmPassword"]').textContent = '👁';
+    document.getElementById('password').type = 'password';
+    document.querySelector('[data-target="password"]').textContent = '👁';
     if (register) {
         loginButton.textContent = 'Register';
         loginTitle.textContent = 'Create a new account';
         toggleAuthLink.innerHTML = 'Already have an account? <a href="#">Login here</a>';
+        confirmPasswordGroup.style.display = 'block';
     } else {
         loginButton.textContent = 'Login';
         loginTitle.textContent = 'Sign in to access your settings and keys';
         toggleAuthLink.innerHTML = 'Don\'t have an account? <a href="#">Register here</a>';
+        confirmPasswordGroup.style.display = 'none';
     }
 }
 
@@ -62,6 +85,18 @@ loginButton.addEventListener('click', async () => {
     if (!username.trim() || !password.trim()) {
         showError('Please enter both username and password');
         return;
+    }
+
+    if (isRegisterMode) {
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        if (!confirmPassword) {
+            showError('Please confirm your password');
+            return;
+        }
+        if (password !== confirmPassword) {
+            showError('Passwords do not match');
+            return;
+        }
     }
 
     const endpoint = isRegisterMode ? '/api/auth/register' : '/api/auth/login';
@@ -105,6 +140,7 @@ logoutButton.addEventListener('click', async () => {
     currentUser = null;
     document.getElementById('username').value = '';
     document.getElementById('password').value = '';
+    document.getElementById('confirmPassword').value = '';
     mainApp.classList.remove('active');
     loginPage.style.display = 'flex';
     setRegisterMode(false);
