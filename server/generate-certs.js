@@ -29,7 +29,7 @@ cert.validity.notAfter = new Date();
 cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
 
 const attrs = [
-    { name: 'commonName', value: 'localhost' },
+    { name: 'commonName', value: 'signtool.local' },
     { name: 'organizationName', value: 'Digital Signature Tool (Dev)' }
 ];
 cert.setSubject(attrs);
@@ -38,6 +38,7 @@ cert.setIssuer(attrs);
 cert.setExtensions([
     { name: 'subjectAltName', altNames: [
         { type: 2, value: 'localhost' },
+        { type: 2, value: 'signtool.local' },
         { type: 7, ip: '127.0.0.1' }
     ]}
 ]);
