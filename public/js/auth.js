@@ -71,6 +71,13 @@ function setRegisterMode(register) {
     }
 }
 
+// Submit on Enter key in any input field
+document.querySelectorAll('#loginPage input').forEach(input => {
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') loginButton.click();
+    });
+});
+
 // Toggle between login and register mode
 toggleAuthLink.addEventListener('click', (e) => {
     e.preventDefault();
