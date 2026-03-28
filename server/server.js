@@ -1,6 +1,5 @@
-// server.js - Express HTTPS server
-const https = require('https');
-const fs = require('fs');
+// server.js - Express HTTP server (INSECURE — for Wireshark demo only)
+const http = require('http');
 const path = require('path');
 const express = require('express');
 const session = require('express-session');
@@ -9,7 +8,7 @@ const authRoutes = require('./auth');
 const userStore = require('./userStore');
 
 const app = express();
-const PORT = 3443;
+const PORT = 3000;
 
 // Security headers (disable CSP to allow inline styles/scripts in the client app)
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -23,7 +22,7 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true,
+        secure: false,  // INSECURE: allows cookies over plain HTTP
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
@@ -39,22 +38,9 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 async function start() {
     await userStore.initialize();
 
-    const certDir = path.join(__dirname, '..', 'certs');
-    const keyPath = path.join(certDir, 'key.pem');
-    const certPath = path.join(certDir, 'cert.pem');
-
-    if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-        console.error('SSL certificates not found. Run: npm run generate-certs');
-        process.exit(1);
-    }
-
-    const sslOptions = {
-        key: fs.readFileSync(keyPath),
-        cert: fs.readFileSync(certPath)
-    };
-
-    https.createServer(sslOptions, app).listen(PORT, () => {
-        console.log(`HTTPS server running on https://localhost:${PORT}`);
+    http.createServer(app).listen(PORT, () => {
+        console.log(`HTTP server running on http://localhost:${PORT}`);
+        console.log('WARNING: Traffic is unencrypted — credentials visible to network sniffers');
     });
 }
 
