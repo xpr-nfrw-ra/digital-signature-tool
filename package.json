@@ -5,7 +5,8 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "generate-certs": "node server/generate-certs.js"
+    "generate-certs": "node server/generate-certs.js",
+    "generate-ca-chain": "bash scripts/gen-ca-chain.sh"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
