@@ -1,4 +1,4 @@
-// server.js - Express HTTPS server
+// server.js - Express HTTPS server (OpenSSL CA chain)
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
@@ -40,17 +40,19 @@ async function start() {
     await userStore.initialize();
 
     const certDir = path.join(__dirname, '..', 'certs');
-    const keyPath = path.join(certDir, 'key.pem');
-    const certPath = path.join(certDir, 'cert.pem');
+    const keyPath = path.join(certDir, 'server.key');
+    const certPath = path.join(certDir, 'server.crt');
+    const chainPath = path.join(certDir, 'chain.crt');
 
-    if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-        console.error('SSL certificates not found. Run: npm run generate-certs');
+    if (!fs.existsSync(keyPath) || !fs.existsSync(certPath) || !fs.existsSync(chainPath)) {
+        console.error('SSL certificates not found. Run: npm run generate-ca-chain');
         process.exit(1);
     }
 
     const sslOptions = {
         key: fs.readFileSync(keyPath),
-        cert: fs.readFileSync(certPath)
+        cert: fs.readFileSync(certPath),
+        ca: fs.readFileSync(chainPath)
     };
 
     https.createServer(sslOptions, app).listen(PORT, () => {
