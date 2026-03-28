@@ -1,6 +1,8 @@
-# Digital Signature Tool
+# Digital Signature Tool — HTTPS with Self-Signed Certificate
 
 A browser-based tool for creating and verifying digital signatures. All cryptographic operations run entirely in the browser — private keys never leave your machine.
+
+This branch (`main`) runs over HTTPS using a self-signed certificate generated with node-forge (no OpenSSL required). The browser will show a one-time security warning that you dismiss manually.
 
 ## Features
 
@@ -13,7 +15,6 @@ A browser-based tool for creating and verifying digital signatures. All cryptogr
 ## Requirements
 
 - [Node.js](https://nodejs.org/) v16 or higher
-- npm (included with Node.js)
 
 ## Setup & Running
 
@@ -23,13 +24,13 @@ A browser-based tool for creating and verifying digital signatures. All cryptogr
 npm install
 ```
 
-### 2. Generate SSL certificates (one-time)
+### 2. Generate the self-signed certificate (one-time)
 
 ```bash
 npm run generate-certs
 ```
 
-This creates a self-signed certificate in the `certs/` directory, required for the HTTPS server.
+This uses node-forge to create `certs/key.pem` and `certs/cert.pem` (valid for 1 year, SANs for `localhost` and `127.0.0.1`).
 
 ### 3. Start the server
 
@@ -39,39 +40,33 @@ npm start
 
 ### 4. Open the app
 
-Navigate to **https://localhost:3443** in your browser.
+Navigate to **https://localhost:3443**.
 
-> Your browser will show a security warning because the certificate is self-signed. This is expected — click **Advanced** → **Proceed to localhost** (or equivalent) to continue.
+The browser will show a "Your connection is not private" warning because the certificate is self-signed and not trusted by any CA. This is expected — click **Advanced** → **Proceed to localhost** (or equivalent) to continue.
 
 ## Project Structure
 
 ```
 digital-signature-tool/
-├── public/          # Client-side files (HTML, CSS, JS, forge.js)
+├── public/              # Client-side files (HTML, CSS, JS, forge.js)
 │   ├── index.html
 │   ├── css/
 │   ├── js/
 │   └── lib/
-├── server/          # Node.js/Express backend
-│   ├── index.js     # Entry point, HTTPS server
-│   ├── auth.js      # Auth routes (/api/auth/*)
-│   └── userStore.js # JSON-file user storage
-├── data/            # Runtime data — gitignored
+├── server/              # Node.js/Express backend
+│   ├── server.js        # Entry point, HTTPS server (port 3443)
+│   ├── generate-certs.js# Self-signed cert generation (node-forge)
+│   ├── auth.js          # Auth routes (/api/auth/*)
+│   └── userStore.js     # JSON-file user storage
+├── data/                # Runtime data — gitignored
 │   └── users.json
-├── certs/           # SSL certs — gitignored
+├── certs/               # Generated certificates — gitignored
 └── package.json
 ```
-
-## Configuration
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Port | `3443` | HTTPS port (set in `server/index.js`) |
-| User storage | `data/users.json` | Swap `server/userStore.js` to use a real database |
 
 ## Security Notes
 
 - Private keys are generated and used entirely in the browser; they are never sent to the server.
 - Passwords are hashed with bcrypt before storage.
 - Sessions use secure, HTTP-only cookies over HTTPS.
-- For production use, replace the self-signed certificate with one from a trusted CA.
+- The self-signed certificate is for local development only. For a trusted certificate, see the `https-openssl-ca` branch.
