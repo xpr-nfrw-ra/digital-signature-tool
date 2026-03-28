@@ -1,6 +1,8 @@
-# Digital Signature Tool
+# Digital Signature Tool — HTTPS with OpenSSL CA Chain
 
 A browser-based tool for creating and verifying digital signatures. All cryptographic operations run entirely in the browser — private keys never leave your machine.
+
+This branch (`https-openssl-ca`) runs over HTTPS using a proper 3-tier PKI: Root CA → Intermediate CA → Server certificate, all generated locally with OpenSSL. Importing the Root CA into your OS trust store gives a genuine green padlock with no browser warnings.
 
 ## Features
 
@@ -13,7 +15,7 @@ A browser-based tool for creating and verifying digital signatures. All cryptogr
 ## Requirements
 
 - [Node.js](https://nodejs.org/) v16 or higher
-- npm (included with Node.js)
+- [OpenSSL](https://www.openssl.org/) 1.1+ on your PATH (`openssl version` to verify)
 
 ## Setup & Running
 
@@ -23,55 +25,79 @@ A browser-based tool for creating and verifying digital signatures. All cryptogr
 npm install
 ```
 
-### 2. Generate SSL certificates (one-time)
+### 2. Generate the CA chain (one-time)
 
 ```bash
-npm run generate-certs
+npm run generate-ca-chain
 ```
 
-This creates a self-signed certificate in the `certs/` directory, required for the HTTPS server.
+This runs `scripts/gen-ca-chain.sh` and creates the following in `certs/`:
 
-### 3. Start the server
+| File | Description |
+|------|-------------|
+| `rootCA.key` / `rootCA.crt` | Root CA — self-signed, 10-year validity |
+| `intermediate.key` / `intermediate.crt` | Intermediate CA — signed by Root, 5 years |
+| `server.key` / `server.crt` | Server cert — signed by Intermediate, 1 year |
+| `chain.crt` | Intermediate + Root bundle sent during TLS handshake |
+
+### 3. Trust the Root CA (optional but recommended)
+
+Without this step the browser shows a certificate warning. With it, you get a proper green padlock.
+
+**Windows (Chrome / Edge inherit this automatically):**
+1. Press `Win + R`, type `certmgr.msc`, press Enter
+2. Expand **Trusted Root Certification Authorities** → right-click **Certificates** → **All Tasks** → **Import**
+3. Browse to `certs/rootCA.crt` → Next → Next → Finish → Yes
+
+**Firefox** (manages its own trust store):
+- `about:preferences#privacy` → **View Certificates** → **Authorities** → **Import** → select `certs/rootCA.crt` → check *Trust this CA to identify websites* → OK
+
+Restart the browser after importing.
+
+### 4. Start the server
 
 ```bash
 npm start
 ```
 
-### 4. Open the app
+### 5. Open the app
 
-Navigate to **https://localhost:3443** in your browser.
+Navigate to **https://localhost:3443**.
 
-> Your browser will show a security warning because the certificate is self-signed. This is expected — click **Advanced** → **Proceed to localhost** (or equivalent) to continue.
+After importing the Root CA you should see a closed padlock. Click it → **Connection is secure** → **Certificate is valid** to inspect the full chain.
 
 ## Project Structure
 
 ```
 digital-signature-tool/
-├── public/          # Client-side files (HTML, CSS, JS, forge.js)
+├── public/              # Client-side files (HTML, CSS, JS, forge.js)
 │   ├── index.html
 │   ├── css/
 │   ├── js/
 │   └── lib/
-├── server/          # Node.js/Express backend
-│   ├── index.js     # Entry point, HTTPS server
-│   ├── auth.js      # Auth routes (/api/auth/*)
-│   └── userStore.js # JSON-file user storage
-├── data/            # Runtime data — gitignored
+├── scripts/
+│   └── gen-ca-chain.sh  # OpenSSL PKI generation script
+├── server/              # Node.js/Express backend
+│   ├── server.js        # Entry point, HTTPS server (port 3443)
+│   ├── auth.js          # Auth routes (/api/auth/*)
+│   └── userStore.js     # JSON-file user storage
+├── data/                # Runtime data — gitignored
 │   └── users.json
-├── certs/           # SSL certs — gitignored
+├── certs/               # Generated certificates — gitignored
 └── package.json
 ```
 
-## Configuration
+## Verifying TLS from the command line
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Port | `3443` | HTTPS port (set in `server/index.js`) |
-| User storage | `data/users.json` | Swap `server/userStore.js` to use a real database |
+```bash
+openssl s_client -connect localhost:3443 -CAfile certs/rootCA.crt
+```
+
+Look for `Verify return code: 0 (ok)` to confirm the chain validates correctly.
 
 ## Security Notes
 
 - Private keys are generated and used entirely in the browser; they are never sent to the server.
 - Passwords are hashed with bcrypt before storage.
 - Sessions use secure, HTTP-only cookies over HTTPS.
-- For production use, replace the self-signed certificate with one from a trusted CA.
+- The generated Root CA is for local development only — do not use it in production.
