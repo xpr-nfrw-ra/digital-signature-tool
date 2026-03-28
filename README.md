@@ -1,19 +1,20 @@
-# Digital Signature Tool
+# Digital Signature Tool — Insecure HTTP (Wireshark Demo)
 
 A browser-based tool for creating and verifying digital signatures. All cryptographic operations run entirely in the browser — private keys never leave your machine.
+
+This branch (`http-demo`) intentionally runs over plain **HTTP** with no encryption. Its purpose is to demonstrate — using Wireshark — how login credentials are exposed in plaintext when TLS is absent. Do not use this in any environment where traffic could be observed by others.
 
 ## Features
 
 - **File Signing** — sign any file with an RSA private key
 - **Signature Verification** — verify a file's authenticity against a public key
 - **Key Generation** — generate RSA key pairs (2048 / 3072 / 4096 bits)
-- **User Accounts** — session-based authentication with secure HTTPS cookies
+- **User Accounts** — session-based authentication (insecure cookies over HTTP)
 - **Guest Mode** — use signing/verification without an account
 
 ## Requirements
 
 - [Node.js](https://nodejs.org/) v16 or higher
-- npm (included with Node.js)
 
 ## Setup & Running
 
@@ -23,55 +24,45 @@ A browser-based tool for creating and verifying digital signatures. All cryptogr
 npm install
 ```
 
-### 2. Generate SSL certificates (one-time)
-
-```bash
-npm run generate-certs
-```
-
-This creates a self-signed certificate in the `certs/` directory, required for the HTTPS server.
-
-### 3. Start the server
+### 2. Start the server
 
 ```bash
 npm start
 ```
 
-### 4. Open the app
+No certificate generation needed — this branch uses plain HTTP.
 
-Navigate to **https://localhost:3443** in your browser.
+### 3. Open the app
 
-> Your browser will show a security warning because the certificate is self-signed. This is expected — click **Advanced** → **Proceed to localhost** (or equivalent) to continue.
+Navigate to **http://localhost:3000**.
+
+## Demonstrating with Wireshark
+
+1. Open Wireshark and start a capture on the loopback adapter (`lo` on Linux/Mac, "Npcap Loopback Adapter" on Windows)
+2. Apply the display filter: `tcp.port == 3000 && http`
+3. Register or log in via the browser
+4. In Wireshark, find the `POST /api/auth/login` or `POST /api/auth/register` packet and inspect the HTTP body — the username and password appear in plaintext
+
+This contrasts with the `main` and `https-openssl-ca` branches where the same request body is encrypted inside a TLS record and is not readable in the capture.
 
 ## Project Structure
 
 ```
 digital-signature-tool/
-├── public/          # Client-side files (HTML, CSS, JS, forge.js)
+├── public/              # Client-side files (HTML, CSS, JS, forge.js)
 │   ├── index.html
 │   ├── css/
 │   ├── js/
 │   └── lib/
-├── server/          # Node.js/Express backend
-│   ├── index.js     # Entry point, HTTPS server
-│   ├── auth.js      # Auth routes (/api/auth/*)
-│   └── userStore.js # JSON-file user storage
-├── data/            # Runtime data — gitignored
+├── server/              # Node.js/Express backend
+│   ├── server.js        # Entry point, HTTP server (port 3000)
+│   ├── auth.js          # Auth routes (/api/auth/*)
+│   └── userStore.js     # JSON-file user storage
+├── data/                # Runtime data — gitignored
 │   └── users.json
-├── certs/           # SSL certs — gitignored
 └── package.json
 ```
 
-## Configuration
+## Security Warning
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Port | `3443` | HTTPS port (set in `server/index.js`) |
-| User storage | `data/users.json` | Swap `server/userStore.js` to use a real database |
-
-## Security Notes
-
-- Private keys are generated and used entirely in the browser; they are never sent to the server.
-- Passwords are hashed with bcrypt before storage.
-- Sessions use secure, HTTP-only cookies over HTTPS.
-- For production use, replace the self-signed certificate with one from a trusted CA.
+This branch is for **educational/demo purposes only**. Passwords are transmitted in plaintext and session cookies are not secure-flagged.
