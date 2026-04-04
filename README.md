@@ -2,7 +2,7 @@
 
 A browser-based tool for creating and verifying digital signatures. All cryptographic operations run entirely in the browser — private keys never leave your machine.
 
-This branch (`main`) runs over HTTPS using a self-signed certificate generated with node-forge (no OpenSSL required). The browser will show a one-time security warning that you dismiss manually.
+This branch (`https-self-signed`) runs over HTTPS using a self-signed certificate generated with node-forge (no OpenSSL required). The browser will show a one-time security warning that you dismiss manually.
 
 ## Features
 
@@ -69,4 +69,4 @@ digital-signature-tool/
 - Private keys are generated and used entirely in the browser; they are never sent to the server.
 - Passwords are hashed with bcrypt before storage.
 - Sessions use secure, HTTP-only cookies over HTTPS.
-- The self-signed certificate is for local development only. For a trusted certificate, see the `https-openssl-ca` branch.
+- The self-signed certificate is for local development only. For a trusted certificate, see the `main` branch.
