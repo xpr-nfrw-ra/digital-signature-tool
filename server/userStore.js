@@ -1,55 +1,29 @@
-// userStore.js - JSON file-based user storage
-// All functions are async so the interface stays identical when swapping to a database.
+// userStore.js - Prisma/SQLite user storage
+// All functions are async so the interface stays identical to the old JSON-based store.
 
-const fs = require('fs').promises;
 const path = require('path');
+const { PrismaClient } = require('@prisma/client');
+const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const DATA_FILE = path.join(DATA_DIR, 'users.json');
-
-async function readUsers() {
-    try {
-        const data = await fs.readFile(DATA_FILE, 'utf8');
-        return JSON.parse(data);
-    } catch (err) {
-        if (err.code === 'ENOENT') return [];
-        throw err;
-    }
-}
-
-async function writeUsers(users) {
-    await fs.writeFile(DATA_FILE, JSON.stringify(users, null, 2), 'utf8');
-}
+const dbPath = path.join(__dirname, '..', 'dev.db');
+const adapter = new PrismaBetterSqlite3({ url: 'file:' + dbPath });
+const prisma = new PrismaClient({ adapter });
 
 async function findUserByUsername(username) {
-    const users = await readUsers();
-    return users.find(u => u.username === username) || null;
+    return prisma.user.findUnique({ where: { username } });
 }
 
 async function createUser(username, hashedPassword) {
-    const users = await readUsers();
-    const user = {
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-        username,
-        hashedPassword,
-        createdAt: new Date().toISOString()
-    };
-    users.push(user);
-    await writeUsers(users);
-    return user;
+    return prisma.user.create({
+        data: {
+            username,
+            passwordHash: hashedPassword,
+        },
+    });
 }
 
 async function initialize() {
-    try {
-        await fs.mkdir(DATA_DIR, { recursive: true });
-    } catch (err) {
-        if (err.code !== 'EEXIST') throw err;
-    }
-    try {
-        await fs.access(DATA_FILE);
-    } catch {
-        await writeUsers([]);
-    }
+    await prisma.$connect();
 }
 
-module.exports = { findUserByUsername, createUser, initialize };
+module.exports = { findUserByUsername, createUser, initialize, prisma };

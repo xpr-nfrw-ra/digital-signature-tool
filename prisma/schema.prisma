@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           Int            @id @default(autoincrement())
+  username     String         @unique
+  passwordHash String         @map("password_hash")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  sessions     Session[]
+  signatureLogs SignatureLog[]
+  publicKeys   PublicKey[]
+  certificates Certificate[]
+
+  @@map("users")
+}
+
+model Session {
+  id          String   @id
+  userId      Int      @map("user_id")
+  sessionData String   @map("session_data")
+  expiresAt   DateTime @map("expires_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("sessions")
+}
+
+model SignatureLog {
+  id                   Int      @id @default(autoincrement())
+  userId               Int      @map("user_id")
+  documentName         String   @map("document_name")
+  documentHash         String   @map("document_hash")
+  publicKeyFingerprint String   @map("public_key_fingerprint")
+  signedAt             DateTime @default(now()) @map("signed_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("signature_log")
+}
+
+model PublicKey {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  fingerprint  String   @unique
+  publicKeyPem String   @map("public_key_pem")
+  label        String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("public_keys")
+}
+
+model Certificate {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  certPem   String   @map("cert_pem")
+  label     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("certificates")
+}

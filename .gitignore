@@ -1,3 +1,9 @@
 node_modules/
-data/users.json
 certs/
+.env
+
+# SQLite database (runtime data)
+dev.db
+
+# Prisma generated client (rebuilt via `npm install`)
+/generated/prisma
