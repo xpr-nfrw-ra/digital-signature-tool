@@ -75,14 +75,16 @@ digital-signature-tool/
 │   ├── css/
 │   ├── js/
 │   └── lib/
+├── prisma/
+│   ├── schema.prisma    # Database schema (users, sessions, signature_log, public_keys, certificates)
+│   └── migrations/      # SQL migration history
 ├── scripts/
 │   └── gen-ca-chain.sh  # OpenSSL PKI generation script
 ├── server/              # Node.js/Express backend
 │   ├── server.js        # Entry point, HTTPS server (port 3443)
 │   ├── auth.js          # Auth routes (/api/auth/*)
-│   └── userStore.js     # JSON-file user storage
-├── data/                # Runtime data — gitignored
-│   └── users.json
+│   └── userStore.js     # Prisma/SQLite user storage
+├── dev.db               # SQLite database — gitignored (created on first run)
 ├── certs/               # Generated certificates — gitignored
 └── package.json
 ```
@@ -100,4 +102,5 @@ Look for `Verify return code: 0 (ok)` to confirm the chain validates correctly.
 - Private keys are generated and used entirely in the browser; they are never sent to the server.
 - Passwords are hashed with bcrypt before storage.
 - Sessions use secure, HTTP-only cookies over HTTPS.
+- User data is stored in a local SQLite database (`dev.db`). Only public keys, certificates, and signature records are stored — never private keys.
 - The generated Root CA is for local development only — do not use it in production.
