@@ -7,15 +7,46 @@
 
 ---
 
+## Setup & Usage
+
+### First-time setup
+
+```bash
+cd digital-signature-tool
+npm install          # also runs `prisma generate` via postinstall hook
+npx prisma migrate deploy   # creates dev.db and applies all migrations
+```
+
+`dev.db` is created at `digital-signature-tool/dev.db`. It is gitignored.
+
+### Inspecting the database
+
+```bash
+npx prisma studio    # opens a browser UI at http://localhost:5555
+```
+
+### Making schema changes
+
+1. Edit `prisma/schema.prisma`
+2. Run `npx prisma migrate dev --name <description>` — generates a migration file and applies it
+3. The migration file is saved under `prisma/migrations/` and should be committed
+
+### Resetting the database (wipes all data)
+
+```bash
+npx prisma migrate reset
+```
+
+---
+
 ## Overall Structure
 
-The database consists of 5 tables, all related to the `users` table:
+The database consists of 4 tables, all related to the `users` table:
 
 ```
 users ──< sessions
 users ──< signature_log
 users ──< public_keys
-users ──< certificates
 ```
 
 The `──<` symbol denotes a **one-to-many** relationship: one user can have multiple records in the associated tables.
@@ -96,22 +127,6 @@ The `──<` symbol denotes a **one-to-many** relationship: one user can have m
 
 ---
 
-### 5. `certificates` — Certificates
-
-**Purpose:** Allows users to store self-signed certificates server-side so others can retrieve them for verification.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | INTEGER (PK) | Auto-incrementing ID |
-| `user_id` | INTEGER (FK) | Reference to `users.id` |
-| `cert_pem` | TEXT | Certificate in PEM format |
-| `label` | TEXT | User-defined name |
-| `created_at` | DATETIME | Creation timestamp |
-
-**Relation:** `user_id` → `users.id`
-
----
-
 ## Relationship Diagram
 
 ```
@@ -124,20 +139,20 @@ The `──<` symbol denotes a **one-to-many** relationship: one user can have m
 │ created_at                          │
 └──────────┬──────────────────────────┘
            │ (1)
-    ┌──────┴────────────────────────────────────┐
-    │ (many)                                    │
-    │                                           │
-    ▼              ▼              ▼              ▼
-┌─────────┐ ┌──────────────┐ ┌──────────┐ ┌──────────────┐
-│sessions │ │signature_log │ │public_   │ │certificates  │
-│         │ │              │ │keys      │ │              │
-│id       │ │id            │ │id        │ │id            │
-│user_id  │ │user_id       │ │user_id   │ │user_id       │
-│session_ │ │document_name │ │finger-   │ │cert_pem      │
-│data     │ │document_hash │ │print     │ │label         │
-│expires_ │ │public_key_   │ │public_   │ │created_at    │
-│at       │ │fingerprint   │ │key_pem   │ │              │
-└─────────┘ │signed_at     │ │label     │ └──────────────┘
+    ┌──────┴───────────────────────┐
+    │ (many)                       │
+    │                              │
+    ▼              ▼               ▼
+┌─────────┐ ┌──────────────┐ ┌──────────┐
+│sessions │ │signature_log │ │public_   │
+│         │ │              │ │keys      │
+│id       │ │id            │ │id        │
+│user_id  │ │user_id       │ │user_id   │
+│session_ │ │document_name │ │finger-   │
+│data     │ │document_hash │ │print     │
+│expires_ │ │public_key_   │ │public_   │
+│at       │ │fingerprint   │ │key_pem   │
+└─────────┘ │signed_at     │ │label     │
             └──────────────┘ │created_at│
                              └──────────┘
 ```
@@ -151,7 +166,6 @@ The `──<` symbol denotes a **one-to-many** relationship: one user can have m
 All cryptographic operations (signing, verification, key generation) are performed **in the browser** via forge.js. The server stores:
 
 - Public keys (`public_keys`)
-- Certificates (`certificates`)
 - Signing *evidence* (`signature_log`)
 - User credentials (`users`)
 - Session data (`sessions`)
@@ -164,6 +178,5 @@ For the planned backend phase of the project:
 
 - `signature_log` — will power "who signed what, and when" queries
 - `public_keys` — enables live key exchange in multi-user verification workflows
-- `certificates` — full-scale verification support
 
 Currently, only the `users` table is fully integrated into the application logic. The remaining tables are schema-ready for future functionality.

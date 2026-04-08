@@ -15,7 +15,6 @@ model User {
   sessions     Session[]
   signatureLogs SignatureLog[]
   publicKeys   PublicKey[]
-  certificates Certificate[]
 
   @@map("users")
 }
@@ -57,14 +56,3 @@ model PublicKey {
   @@map("public_keys")
 }
 
-model Certificate {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  certPem   String   @map("cert_pem")
-  label     String
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id])
-
-  @@map("certificates")
-}
