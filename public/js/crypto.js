@@ -33,6 +33,30 @@ function readFileAsArrayBuffer(file) {
     });
 }
 
+// SHA-256 fingerprint of a public key (DER-encoded SubjectPublicKeyInfo), as hex.
+// Matches the server-side fingerprint computed by Node's crypto module.
+function fingerprintFromPublicKey(publicKey) {
+    const asn1 = forge.pki.publicKeyToAsn1(publicKey);
+    const derBytes = forge.asn1.toDer(asn1).getBytes();
+    const md = forge.md.sha256.create();
+    md.update(derBytes);
+    return md.digest().toHex();
+}
+
+// Derive the matching public-key fingerprint from a private-key PEM (RSA only).
+function fingerprintFromPrivateKeyPem(privateKeyPem) {
+    const privateKey = forge.pki.privateKeyFromPem(privateKeyPem);
+    const publicKey = forge.pki.setRsaPublicKey(privateKey.n, privateKey.e);
+    return fingerprintFromPublicKey(publicKey);
+}
+
+// Hex digest of file content using the chosen hash algorithm.
+function hashFileHex(fileData, hashAlgorithm) {
+    const md = forge.md[hashAlgorithm].create();
+    md.update(forge.util.binary.raw.encode(new Uint8Array(fileData)));
+    return md.digest().toHex();
+}
+
 // Generate RSA key pair
 async function generateRSAKeyPair(keySize) {
     return new Promise((resolve, reject) => {

@@ -65,9 +65,9 @@
                     <div class="nav-item-desc">Configure algorithms</div>
                 </div>
             </nav>
-            <div class="user-info" id="userInfo" style="display: none;">
-                <div class="username" id="displayUsername"></div>
-                <button class="logout-button" id="logoutButton">Logout</button>
+            <div class="user-info" id="userInfo">
+                <div class="username" id="displayUsername">Guest session</div>
+                <button class="logout-button" id="logoutButton">← Back to Login</button>
             </div>
         </div>
 
@@ -145,6 +145,19 @@
                                 <div class="file-indicator">🔓</div>
                                 <span class="file-text">Choose the public key file...</span>
                             </div>
+                        </div>
+
+                        <div class="input-group" id="keyLookupGroup">
+                            <label>Or look up a stored public key</label>
+                            <div class="key-lookup-row">
+                                <select id="lookupMode">
+                                    <option value="username">By username</option>
+                                    <option value="fingerprint">By fingerprint</option>
+                                </select>
+                                <input type="text" id="lookupQuery" placeholder="Enter exact username or fingerprint" />
+                                <button type="button" class="button secondary" id="lookupButton">Look up</button>
+                            </div>
+                            <div class="key-lookup-result" id="lookupResult"></div>
                         </div>
 
                         <button class="button" id="verifyButton">Verify Signature</button>

@@ -32,11 +32,19 @@ document.querySelectorAll('.password-toggle').forEach(btn => {
 
 function showApp(username) {
     currentUser = username;
-    displayUsername.textContent = 'Logged in as: ' + username;
-    userInfo.style.display = 'block';
+    if (username) {
+        displayUsername.textContent = 'Logged in as: ' + username;
+        logoutButton.textContent = 'Logout';
+    } else {
+        displayUsername.textContent = 'Guest session';
+        logoutButton.textContent = '← Back to Login';
+    }
     loginPage.style.display = 'none';
     mainApp.classList.add('active');
     hideError();
+    if (username && typeof window.loadSettingsFromServer === 'function') {
+        window.loadSettingsFromServer();
+    }
 }
 
 function showError(msg) {
@@ -131,18 +139,17 @@ loginButton.addEventListener('click', async () => {
 
 // Guest button handler
 guestButton.addEventListener('click', () => {
-    currentUser = null;
-    userInfo.style.display = 'none';
-    loginPage.style.display = 'none';
-    mainApp.classList.add('active');
+    showApp(null);
 });
 
-// Logout button handler
+// Logout / back-to-login handler — also works for guests (no server call needed).
 logoutButton.addEventListener('click', async () => {
-    try {
-        await fetch('/api/auth/logout', { method: 'POST' });
-    } catch (e) {
-        // Logout locally even if server call fails
+    if (currentUser) {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+        } catch (e) {
+            // Logout locally even if server call fails
+        }
     }
     currentUser = null;
     document.getElementById('username').value = '';

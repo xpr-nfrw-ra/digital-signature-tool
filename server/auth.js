@@ -2,6 +2,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const userStore = require('./userStore');
+const { validate } = require('./validators');
+const { ensureSettings } = require('./settings');
 
 const router = express.Router();
 
@@ -15,11 +17,9 @@ router.post('/register', async (req, res) => {
         if (!username || !password) {
             return res.status(400).json({ error: 'Username and password are required' });
         }
-        if (username.trim().length < 3) {
-            return res.status(400).json({ error: 'Username must be at least 3 characters' });
-        }
-        if (password.length < 6) {
-            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        const err = validate({ username, password });
+        if (err) {
+            return res.status(400).json({ error: err });
         }
 
         const existing = await userStore.findUserByUsername(username.trim());
@@ -29,6 +29,7 @@ router.post('/register', async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
         const user = await userStore.createUser(username.trim(), hashedPassword);
+        await ensureSettings(user.id);
 
         req.session.user = { id: user.id, username: user.username };
         res.json({ success: true, user: { username: user.username } });
@@ -45,6 +46,10 @@ router.post('/login', async (req, res) => {
 
         if (!username || !password) {
             return res.status(400).json({ error: 'Username and password are required' });
+        }
+        const err = validate({ username, password });
+        if (err) {
+            return res.status(401).json({ error: 'Invalid credentials' });
         }
 
         const user = await userStore.findUserByUsername(username.trim());

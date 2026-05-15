@@ -69,14 +69,53 @@ const hashAlgorithm = document.getElementById('hashAlgorithm');
 const signatureAlgorithm = document.getElementById('signatureAlgorithm');
 const keySize = document.getElementById('keySize');
 
+function applySettingsToUI(s) {
+    appSettings.hashAlgorithm = s.hashAlgorithm;
+    appSettings.signatureAlgorithm = s.signatureAlgorithm;
+    appSettings.keySize = String(s.keySize);
+    hashAlgorithm.value = s.hashAlgorithm;
+    signatureAlgorithm.value = s.signatureAlgorithm;
+    keySize.value = String(s.keySize);
+}
+
+async function loadSettingsFromServer() {
+    try {
+        const res = await fetch('/api/settings');
+        if (!res.ok) return; // guest or not logged in
+        const { settings } = await res.json();
+        applySettingsToUI(settings);
+    } catch (e) {
+        // server unreachable — keep client defaults
+    }
+}
+
+// Persist a single field. Guest users (no session) silently get a 401 and we ignore it.
+async function persistSetting(patch) {
+    try {
+        await fetch('/api/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patch),
+        });
+    } catch (e) {
+        // network error — settings will be re-saved on next change
+    }
+}
+
 hashAlgorithm.addEventListener('change', (e) => {
     appSettings.hashAlgorithm = e.target.value;
+    persistSetting({ hashAlgorithm: e.target.value });
 });
 
 signatureAlgorithm.addEventListener('change', (e) => {
     appSettings.signatureAlgorithm = e.target.value;
+    persistSetting({ signatureAlgorithm: e.target.value });
 });
 
 keySize.addEventListener('change', (e) => {
     appSettings.keySize = e.target.value;
+    persistSetting({ keySize: Number(e.target.value) });
 });
+
+// Expose for auth.js to call after successful login.
+window.loadSettingsFromServer = loadSettingsFromServer;

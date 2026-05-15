@@ -6,10 +6,11 @@ This branch (`main`) runs over HTTPS using a proper 3-tier PKI: Root CA → Inte
 
 ## Features
 
-- **File Signing** — sign any file with an RSA private key
-- **Signature Verification** — verify a file's authenticity against a public key
-- **Key Generation** — generate RSA key pairs (2048 / 3072 / 4096 bits)
-- **User Accounts** — session-based authentication with secure HTTPS cookies
+- **File Signing** — sign any file with an RSA private key (client-side; logged to your audit history when signed in)
+- **Signature Verification** — verify a file against a public key, either uploaded or looked up server-side
+- **Key Generation** — generate RSA key pairs (2048 / 3072 / 4096 bits); the public half is auto-registered for logged-in users
+- **Public Key Directory** — a user can register multiple public keys; verifiers look them up by exact username (returns all of that user's keys) or by fingerprint (returns the single matching key). The `default_public_key_id` setting is a personal bookmark only — it does not restrict which of your keys others can find.
+- **User Accounts & Settings** — session-based auth (sessions persisted across restarts); per-user crypto preferences saved server-side
 - **Guest Mode** — use signing/verification without an account
 
 ## Requirements
@@ -25,7 +26,19 @@ This branch (`main`) runs over HTTPS using a proper 3-tier PKI: Root CA → Inte
 npm install
 ```
 
-### 2. Generate the CA chain (one-time)
+`postinstall` runs `prisma generate` automatically so the Prisma Client is built against the current schema.
+
+### 2. Initialize the database
+
+```bash
+npx prisma migrate deploy
+```
+
+This creates `dev.db` (gitignored) and applies all migrations in `prisma/migrations/`. Re-run after any `git pull` that brings new migrations.
+
+To browse the data later: `npx prisma studio` (UI at <http://localhost:5555>). For a full reset: `npx prisma migrate reset`.
+
+### 3. Generate the CA chain (one-time)
 
 ```bash
 npm run generate-ca-chain
@@ -40,7 +53,7 @@ This runs `scripts/gen-ca-chain.sh` and creates the following in `certs/`:
 | `server.key` / `server.crt` | Server cert — signed by Intermediate, 1 year |
 | `chain.crt` | Intermediate + Root bundle sent during TLS handshake |
 
-### 3. Trust the Root CA (optional but recommended)
+### 4. Trust the Root CA (optional but recommended)
 
 Without this step the browser shows a certificate warning. With it, you get a proper green padlock.
 
@@ -54,13 +67,13 @@ Without this step the browser shows a certificate warning. With it, you get a pr
 
 Restart the browser after importing.
 
-### 4. Start the server
+### 5. Start the server
 
 ```bash
 npm start
 ```
 
-### 5. Open the app
+### 6. Open the app
 
 Navigate to **https://localhost:3443**.
 
@@ -68,26 +81,47 @@ After importing the Root CA you should see a closed padlock. Click it → **Conn
 
 ## Project Structure
 
-```
+```text
 digital-signature-tool/
-├── public/              # Client-side files (HTML, CSS, JS, forge.js)
+├── public/                  # Client-side files (HTML, CSS, JS, forge.js)
 │   ├── index.html
 │   ├── css/
-│   ├── js/
-│   └── lib/
+│   ├── js/                  # auth.js, main.js, crypto.js, signing.js, verification.js
+│   └── lib/                 # forge.min.js
 ├── prisma/
-│   ├── schema.prisma    # Database schema (users, sessions, signature_log, public_keys, certificates)
-│   └── migrations/      # SQL migration history
+│   ├── schema.prisma        # Database schema (users, sessions, signature_log, public_keys, user_settings)
+│   └── migrations/          # SQL migration history
 ├── scripts/
-│   └── gen-ca-chain.sh  # OpenSSL PKI generation script
-├── server/              # Node.js/Express backend
-│   ├── server.js        # Entry point, HTTPS server (port 3443)
-│   ├── auth.js          # Auth routes (/api/auth/*)
-│   └── userStore.js     # Prisma/SQLite user storage
-├── dev.db               # SQLite database — gitignored (created on first run)
-├── certs/               # Generated certificates — gitignored
+│   └── gen-ca-chain.sh      # OpenSSL PKI generation script
+├── server/                  # Node.js/Express backend
+│   ├── server.js            # Entry point, HTTPS server (port 3443)
+│   ├── auth.js              # /api/auth/*  (register, login, logout, me)
+│   ├── settings.js          # /api/settings  (per-user crypto preferences)
+│   ├── keys.js              # /api/keys/*   (register/list/look up/delete public keys)
+│   ├── signatures.js        # /api/signatures/*  (audit log)
+│   ├── userStore.js         # Prisma/SQLite user storage + shared client export
+│   ├── sessionStore.js      # Custom express-session Store backed by Prisma
+│   ├── middleware.js        # requireAuth
+│   └── validators.js        # Centralized input/length validation
+├── dev.db                   # SQLite database — gitignored (created on first run)
+├── certs/                   # Generated certificates — gitignored
+├── database-planning.md     # Schema + querying reference
 └── package.json
 ```
+
+## API at a glance
+
+All endpoints under `/api`. Sessions are cookie-based; `requireAuth` guards everything except `auth/login`, `auth/register`, and the public `auth/me` check.
+
+| Route | Purpose |
+|---|---|
+| `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` | Account lifecycle |
+| `GET /settings`, `PUT /settings` | Per-user crypto preferences |
+| `POST /keys`, `GET /keys/mine`, `DELETE /keys/:id` | Manage your own public keys |
+| `GET /keys/by-username/:u`, `GET /keys/by-fingerprint/:fp` | Targeted lookup for verification |
+| `POST /signatures`, `GET /signatures/mine` | Append / read signing audit log |
+
+See [database-planning.md](database-planning.md) for the data model and Prisma query examples.
 
 ## Verifying TLS from the command line
 
@@ -101,6 +135,8 @@ Look for `Verify return code: 0 (ok)` to confirm the chain validates correctly.
 
 - Private keys are generated and used entirely in the browser; they are never sent to the server.
 - Passwords are hashed with bcrypt before storage.
-- Sessions use secure, HTTP-only cookies over HTTPS.
-- User data is stored in a local SQLite database (`dev.db`). Only public keys, certificates, and signature records are stored — never private keys.
+- Sessions are persisted in SQLite via a Prisma-backed `express-session` store and survive server restarts. Cookies are HTTP-only and secure (HTTPS-only).
+- User data is stored in a local SQLite database (`dev.db`). The server stores only public keys, signing-event records, user credentials (bcrypt hashes), session blobs, and user settings — never private keys.
+- Public-key lookup is targeted: callers must supply an exact username or full fingerprint. There is no browse/list-all endpoint, which limits passive enumeration.
+- Input length caps for usernames, labels, hashes, etc. are enforced at the API boundary in `server/validators.js` (SQLite does not enforce VARCHAR length itself).
 - The generated Root CA is for local development only — do not use it in production.
