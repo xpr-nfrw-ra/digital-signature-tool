@@ -80,14 +80,36 @@ confirmGenerate.addEventListener('click', async () => {
         downloadFile(privateKeyPem, `${keyName}_private.pem`, 'application/x-pem-file');
         downloadFile(publicKeyPem, `${keyName}_public.pem`, 'application/x-pem-file');
         
+        // If logged in, upload the public half to the server. Guests skip this.
+        let uploadInfo = '';
+        if (currentUser) {
+            try {
+                const res = await fetch('/api/keys', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label: keyName, publicKeyPem }),
+                });
+                const data = await res.json();
+                if (res.ok && data.key) {
+                    const fp = data.key.fingerprint;
+                    const short = fp.slice(0, 16);
+                    uploadInfo = ` Public key registered (fingerprint ${short}…).`;
+                } else {
+                    uploadInfo = ` Note: server-side upload failed (${data.error || 'unknown error'}).`;
+                }
+            } catch (e) {
+                uploadInfo = ' Note: server-side upload failed (network error).';
+            }
+        }
+
         // Show success message
         keygenProgress.classList.remove('show');
         modalForm.style.display = 'none';
         modalSuccess.classList.add('active');
-        
+
         const algoName = appSettings.signatureAlgorithm.toUpperCase();
-        document.getElementById('successMessage').textContent = 
-            `Your ${algoName} keys "${keyName}_private.pem" and "${keyName}_public.pem" have been downloaded.`;
+        document.getElementById('successMessage').textContent =
+            `Your ${algoName} keys "${keyName}_private.pem" and "${keyName}_public.pem" have been downloaded.` + uploadInfo;
         
     } catch (error) {
         alert('Key generation failed: ' + error.message);
@@ -165,10 +187,34 @@ signButton.addEventListener('click', async () => {
         // Download signature file
         const originalFileName = fileInput.files[0].name;
         downloadFile(signature, `${originalFileName}.sig`, 'application/octet-stream');
-        
+
+        // Log the signing event on the server (auth required; non-fatal on failure).
+        let logNote = '';
+        if (currentUser) {
+            try {
+                const documentHash = hashFileHex(fileData, appSettings.hashAlgorithm);
+                const publicKeyFingerprint = fingerprintFromPrivateKeyPem(privateKeyPem);
+                const res = await fetch('/api/signatures', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        documentName: originalFileName,
+                        documentHash,
+                        publicKeyFingerprint,
+                    }),
+                });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    logNote = `\n(Note: signing not logged — ${data.error || 'server error'}.)`;
+                }
+            } catch (e) {
+                logNote = '\n(Note: signing not logged — network error.)';
+            }
+        }
+
         signingProgress.classList.remove('show');
         const algoName = appSettings.signatureAlgorithm.toUpperCase();
-        alert(`File signed successfully with ${algoName}! Signature file downloaded.`);
+        alert(`File signed successfully with ${algoName}! Signature file downloaded.` + logNote);
         
     } catch (error) {
         signingProgress.classList.remove('show');

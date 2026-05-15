@@ -2,8 +2,11 @@ node_modules/
 certs/
 .env
 
-# SQLite database (runtime data)
+# SQLite database (runtime data) + transient sidecar files Prisma/SQLite may create
 dev.db
+dev.db-journal
+dev.db-wal
+dev.db-shm
 
 # Prisma generated client (rebuilt via `npm install`)
 /generated/prisma

@@ -711,3 +711,37 @@ body {
     margin-bottom: 24px;
     font-size: 0.9em;
 }
+/* ===== KEY LOOKUP (verification page) ===== */
+.key-lookup-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.key-lookup-row select {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+}
+.key-lookup-row input[type="text"] {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+.key-lookup-row .button.secondary {
+    background: #6c757d;
+    padding: 8px 16px;
+    font-size: 0.9em;
+}
+.key-lookup-result {
+    margin-top: 10px;
+    font-size: 0.9em;
+    color: #333;
+}
+.key-lookup-result.ok    { color: #2e7d32; }
+.key-lookup-result.error { color: #c62828; }
+.key-lookup-result ul    { list-style: none; padding: 0; margin: 6px 0 0; }
+.key-lookup-result li    { padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 4px; cursor: pointer; background: #fafafa; }
+.key-lookup-result li:hover    { background: #eef; }
+.key-lookup-result li.selected { background: #e3f2fd; border-color: #2196f3; }

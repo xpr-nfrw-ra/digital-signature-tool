@@ -15,30 +15,47 @@ model User {
   sessions     Session[]
   signatureLogs SignatureLog[]
   publicKeys   PublicKey[]
+  settings     UserSettings?
 
   @@map("users")
 }
 
+model UserSettings {
+  userId             Int      @id @map("user_id")
+  hashAlgorithm      String   @default("sha256") @map("hash_algorithm")
+  signatureAlgorithm String   @default("rsa") @map("signature_algorithm")
+  keySize            Int      @default(2048) @map("key_size")
+  defaultPublicKeyId Int?     @map("default_public_key_id")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultPublicKey PublicKey? @relation("defaultKey", fields: [defaultPublicKeyId], references: [id], onDelete: SetNull)
+
+  @@map("user_settings")
+}
+
 model Session {
   id          String   @id
-  userId      Int      @map("user_id")
+  userId      Int?     @map("user_id")
   sessionData String   @map("session_data")
   expiresAt   DateTime @map("expires_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([expiresAt])
   @@map("sessions")
 }
 
 model SignatureLog {
-  id                   Int      @id @default(autoincrement())
-  userId               Int      @map("user_id")
-  documentName         String   @map("document_name")
-  documentHash         String   @map("document_hash")
-  publicKeyFingerprint String   @map("public_key_fingerprint")
-  signedAt             DateTime @default(now()) @map("signed_at")
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  documentName  String   @map("document_name")
+  documentHash  String   @map("document_hash")
+  publicKeyId   Int      @map("public_key_id")
+  signedAt      DateTime @default(now()) @map("signed_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+  publicKey PublicKey @relation(fields: [publicKeyId], references: [id])
 
   @@map("signature_log")
 }
@@ -51,7 +68,9 @@ model PublicKey {
   label        String
   createdAt    DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user                User                @relation(fields: [userId], references: [id])
+  signatureLogs       SignatureLog[]
+  defaultForSettings  UserSettings[]      @relation("defaultKey")
 
   @@map("public_keys")
 }

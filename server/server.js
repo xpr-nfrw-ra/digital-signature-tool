@@ -6,7 +6,11 @@ const express = require('express');
 const session = require('express-session');
 const helmet = require('helmet');
 const authRoutes = require('./auth');
+const settingsRoutes = require('./settings').router;
+const keysRoutes = require('./keys').router;
+const signaturesRoutes = require('./signatures').router;
 const userStore = require('./userStore');
+const { PrismaSessionStore, cleanupExpiredSessions } = require('./sessionStore');
 
 const app = express();
 const PORT = 3443;
@@ -17,20 +21,25 @@ app.use(helmet({ contentSecurityPolicy: false }));
 // Parse JSON request bodies
 app.use(express.json());
 
-// Session configuration
+// Session configuration — sessions persisted in SQLite via Prisma so they survive restarts.
+const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 app.use(session({
     secret: 'dev-secret-change-in-production',
     resave: false,
     saveUninitialized: false,
+    store: new PrismaSessionStore({ defaultMaxAgeMs: SESSION_MAX_AGE_MS }),
     cookie: {
         secure: true,
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        maxAge: SESSION_MAX_AGE_MS
     }
 }));
 
 // Auth API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/keys', keysRoutes);
+app.use('/api/signatures', signaturesRoutes);
 
 // Serve static client files
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -38,6 +47,11 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // Start server
 async function start() {
     await userStore.initialize();
+
+    const purged = await cleanupExpiredSessions();
+    if (purged > 0) {
+        console.log(`Purged ${purged} expired session(s).`);
+    }
 
     const certDir = path.join(__dirname, '..', 'certs');
     const keyPath = path.join(certDir, 'server.key');
