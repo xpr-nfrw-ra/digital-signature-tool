@@ -22,7 +22,8 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 
 // Session configuration — sessions persisted in SQLite via Prisma so they survive restarts.
-const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+// 2-hour sliding idle timeout: any authenticated request refreshes `expires_at`.
+const SESSION_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 app.use(session({
     secret: 'dev-secret-change-in-production',
     resave: false,

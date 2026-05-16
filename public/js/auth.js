@@ -39,6 +39,10 @@ function showApp(username) {
         displayUsername.textContent = 'Guest session';
         logoutButton.textContent = '← Back to Login';
     }
+    const accountCard = document.getElementById('accountCard');
+    if (accountCard) {
+        accountCard.style.display = username ? '' : 'none';
+    }
     loginPage.style.display = 'none';
     mainApp.classList.add('active');
     hideError();
@@ -46,6 +50,12 @@ function showApp(username) {
         window.loadSettingsFromServer();
     }
 }
+
+// Updates the sidebar after a successful username change in the Account card.
+window.updateDisplayedUsername = function(newUsername) {
+    currentUser = newUsername;
+    displayUsername.textContent = 'Logged in as: ' + newUsername;
+};
 
 function showError(msg) {
     loginError.textContent = msg;

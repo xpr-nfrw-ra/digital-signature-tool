@@ -295,10 +295,11 @@ body {
 .content-area {
     flex: 1;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     padding: 30px;
     background: #fafafa;
+    overflow-y: auto;
 }
 
 .content-section {
@@ -541,6 +542,26 @@ body {
 
 .settings-group {
     margin-bottom: 16px;
+}
+
+.account-message {
+    display: none;
+    padding: 10px 12px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-size: 0.9em;
+}
+
+.account-message.error {
+    background: #fdecea;
+    color: #a72020;
+    border: 1px solid #f5c2c0;
+}
+
+.account-message.success {
+    background: #e8f6ec;
+    color: #1f6b34;
+    border: 1px solid #c2e3cc;
 }
 
 .settings-group:last-child {
