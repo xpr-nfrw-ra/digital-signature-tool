@@ -119,3 +119,88 @@ keySize.addEventListener('change', (e) => {
 
 // Expose for auth.js to call after successful login.
 window.loadSettingsFromServer = loadSettingsFromServer;
+
+// ===== ACCOUNT (change username / change password) =====
+
+function setAccountMessage(elementId, text, isError) {
+    const el = document.getElementById(elementId);
+    el.textContent = text;
+    el.className = 'account-message ' + (isError ? 'error' : 'success');
+    el.style.display = text ? 'block' : 'none';
+}
+
+const changeUsernameButton = document.getElementById('changeUsernameButton');
+const changePasswordButton = document.getElementById('changePasswordButton');
+
+changeUsernameButton.addEventListener('click', async () => {
+    const currentPassword = document.getElementById('usernameCurrentPassword').value;
+    const newUsername = document.getElementById('newUsername').value;
+
+    if (!currentPassword || !newUsername.trim()) {
+        setAccountMessage('usernameMessage', 'Both fields are required.', true);
+        return;
+    }
+
+    changeUsernameButton.disabled = true;
+    setAccountMessage('usernameMessage', '', false);
+    try {
+        const res = await fetch('/api/auth/username', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentPassword, newUsername: newUsername.trim() }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+            setAccountMessage('usernameMessage', 'Username updated.', false);
+            document.getElementById('usernameCurrentPassword').value = '';
+            document.getElementById('newUsername').value = '';
+            if (typeof window.updateDisplayedUsername === 'function') {
+                window.updateDisplayedUsername(data.user.username);
+            }
+        } else {
+            setAccountMessage('usernameMessage', data.error || 'Update failed.', true);
+        }
+    } catch (e) {
+        setAccountMessage('usernameMessage', 'Connection error.', true);
+    } finally {
+        changeUsernameButton.disabled = false;
+    }
+});
+
+changePasswordButton.addEventListener('click', async () => {
+    const currentPassword = document.getElementById('passwordCurrentPassword').value;
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+        setAccountMessage('passwordMessage', 'All fields are required.', true);
+        return;
+    }
+    if (newPassword !== confirmNewPassword) {
+        setAccountMessage('passwordMessage', 'New passwords do not match.', true);
+        return;
+    }
+
+    changePasswordButton.disabled = true;
+    setAccountMessage('passwordMessage', '', false);
+    try {
+        const res = await fetch('/api/auth/password', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentPassword, newPassword }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+            setAccountMessage('passwordMessage', 'Password updated.', false);
+            document.getElementById('passwordCurrentPassword').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmNewPassword').value = '';
+        } else {
+            setAccountMessage('passwordMessage', data.error || 'Update failed.', true);
+        }
+    } catch (e) {
+        setAccountMessage('passwordMessage', 'Connection error.', true);
+    } finally {
+        changePasswordButton.disabled = false;
+    }
+});

@@ -211,6 +211,54 @@
                             <p>These settings determine the cryptographic algorithms used for signing and verification. SHA-256 with RSA-2048 provides strong security for most use cases.</p>
                         </div>
                     </div>
+
+                    <div class="card" id="accountCard">
+                        <div class="card-title">Account</div>
+
+                        <div class="settings-section">
+                            <h3>Change Username</h3>
+                            <div class="settings-group">
+                                <label>Current Password</label>
+                                <div class="password-wrapper">
+                                    <input type="password" id="usernameCurrentPassword" placeholder="Confirm with your current password">
+                                    <button type="button" class="password-toggle" data-target="usernameCurrentPassword" aria-label="Toggle password visibility">👁</button>
+                                </div>
+                            </div>
+                            <div class="settings-group">
+                                <label>New Username</label>
+                                <input type="text" id="newUsername" placeholder="Enter a new username">
+                            </div>
+                            <div class="account-message" id="usernameMessage"></div>
+                            <button class="modal-button primary" id="changeUsernameButton">Update Username</button>
+                        </div>
+
+                        <div class="settings-section">
+                            <h3>Change Password</h3>
+                            <div class="settings-group">
+                                <label>Current Password</label>
+                                <div class="password-wrapper">
+                                    <input type="password" id="passwordCurrentPassword" placeholder="Enter your current password">
+                                    <button type="button" class="password-toggle" data-target="passwordCurrentPassword" aria-label="Toggle password visibility">👁</button>
+                                </div>
+                            </div>
+                            <div class="settings-group">
+                                <label>New Password</label>
+                                <div class="password-wrapper">
+                                    <input type="password" id="newPassword" placeholder="Enter a new password">
+                                    <button type="button" class="password-toggle" data-target="newPassword" aria-label="Toggle password visibility">👁</button>
+                                </div>
+                            </div>
+                            <div class="settings-group">
+                                <label>Confirm New Password</label>
+                                <div class="password-wrapper">
+                                    <input type="password" id="confirmNewPassword" placeholder="Re-enter the new password">
+                                    <button type="button" class="password-toggle" data-target="confirmNewPassword" aria-label="Toggle password visibility">👁</button>
+                                </div>
+                            </div>
+                            <div class="account-message" id="passwordMessage"></div>
+                            <button class="modal-button primary" id="changePasswordButton">Update Password</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

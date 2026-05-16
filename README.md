@@ -116,6 +116,7 @@ All endpoints under `/api`. Sessions are cookie-based; `requireAuth` guards ever
 | Route | Purpose |
 |---|---|
 | `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` | Account lifecycle |
+| `PUT /auth/username`, `PUT /auth/password` | Change username / password from the Settings → Account card (both require current-password re-confirmation) |
 | `GET /settings`, `PUT /settings` | Per-user crypto preferences |
 | `POST /keys`, `GET /keys/mine`, `DELETE /keys/:id` | Manage your own public keys |
 | `GET /keys/by-username/:u`, `GET /keys/by-fingerprint/:fp` | Targeted lookup for verification |
