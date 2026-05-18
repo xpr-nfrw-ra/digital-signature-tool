@@ -143,6 +143,36 @@ closeSuccess.addEventListener('click', () => {
     }
 });
 
+// Clears signing-page inputs and any in-memory state from the previous session.
+// Called on logout so a new user never sees the previous user's selected file
+// or in-memory generated private key.
+window.resetSigningForm = function() {
+    generatedPrivateKey = null;
+
+    const fileToSign = document.getElementById('fileToSign');
+    const privateKey = document.getElementById('privateKey');
+    if (fileToSign) fileToSign.value = '';
+    if (privateKey) privateKey.value = '';
+
+    const fileToSignText = document.querySelector('#fileToSignWrapper .file-text');
+    if (fileToSignText) {
+        fileToSignText.textContent = 'Choose a file to sign...';
+        fileToSignText.classList.remove('selected-file');
+    }
+    const privateKeyText = document.querySelector('#privateKeyWrapper .file-text');
+    if (privateKeyText) {
+        privateKeyText.textContent = 'Choose your private key file...';
+        privateKeyText.classList.remove('selected-file');
+    }
+
+    signingProgress.classList.remove('show');
+    generateKeyModal.classList.remove('active');
+    modalSuccess.classList.remove('active');
+    modalForm.style.display = 'block';
+    const keyNameInput = document.getElementById('keyName');
+    if (keyNameInput) keyNameInput.value = '';
+};
+
 // Close modal on overlay click
 generateKeyModal.addEventListener('click', (e) => {
     if (e.target === generateKeyModal) {
@@ -178,15 +208,25 @@ signButton.addEventListener('click', async () => {
         
         // Sign the file with selected algorithm
         const signature = await signFile(
-            fileData, 
-            privateKeyPem, 
+            fileData,
+            privateKeyPem,
             appSettings.hashAlgorithm,
             appSettings.signatureAlgorithm
         );
-        
+
+        // Wrap in a self-describing envelope so the verifier knows which algorithm
+        // and hash to use — without this, verification depends on the verifier's
+        // current settings and breaks for anyone but the signer.
+        const sigEnvelope = JSON.stringify({
+            v: 1,
+            alg: appSettings.signatureAlgorithm,
+            hash: appSettings.hashAlgorithm,
+            sig: signature,
+        });
+
         // Download signature file
         const originalFileName = fileInput.files[0].name;
-        downloadFile(signature, `${originalFileName}.sig`, 'application/octet-stream');
+        downloadFile(sigEnvelope, `${originalFileName}.sig`, 'application/json');
 
         // Log the signing event on the server (auth required; non-fatal on failure).
         let logNote = '';

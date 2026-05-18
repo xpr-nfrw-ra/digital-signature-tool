@@ -124,6 +124,17 @@ keySize.addEventListener('change', (e) => {
 // Expose for auth.js to call after successful login.
 window.loadSettingsFromServer = loadSettingsFromServer;
 
+// Resets the Settings dropdowns and in-memory appSettings back to defaults on
+// logout. The server-side row is untouched — it will be re-fetched on next login.
+window.applyDefaultSettings = function() {
+    applySettingsToUI({
+        hashAlgorithm: 'sha256',
+        signatureAlgorithm: 'rsa',
+        keySize: 2048,
+        defaultPublicKeyId: null,
+    });
+};
+
 // ===== MY KEYS (preferred public key) =====
 const myKeysList = document.getElementById('myKeysList');
 const myKeysStatus = document.getElementById('myKeysStatus');
@@ -210,6 +221,30 @@ navItems.forEach(item => {
 });
 
 window.loadMyKeys = loadMyKeys;
+
+// Clears the account-card inputs and messages on logout.
+window.resetAccountForms = function() {
+    const ids = [
+        'usernameCurrentPassword', 'newUsername',
+        'passwordCurrentPassword', 'newPassword', 'confirmNewPassword',
+    ];
+    for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    }
+    for (const id of ['usernameMessage', 'passwordMessage']) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.textContent = '';
+            el.style.display = 'none';
+        }
+    }
+    if (myKeysList) myKeysList.innerHTML = '';
+    if (myKeysStatus) {
+        myKeysStatus.textContent = 'Loading your keys…';
+        myKeysStatus.style.display = 'block';
+    }
+};
 
 // ===== ACCOUNT (change username / change password) =====
 

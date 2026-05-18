@@ -767,6 +767,33 @@ body {
 .key-lookup-result li:hover    { background: #eef; }
 .key-lookup-result li.selected { background: #e3f2fd; border-color: #2196f3; }
 
+/* ===== VERIFY-PAGE ALGORITHM PICKER ===== */
+.verify-algo-row {
+    display: flex;
+    gap: 8px;
+}
+.verify-algo-row select {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 0.95em;
+}
+.verify-algo-row select:disabled {
+    background: #f0f4ff;
+    color: #333;
+    border-color: #c8d4f0;
+    cursor: not-allowed;
+}
+.verify-algo-note {
+    margin-top: 6px;
+    font-size: 0.85em;
+    color: #666;
+}
+.verify-algo-note.detected { color: #2e7d32; }
+.verify-algo-note.legacy   { color: #b26a00; }
+
 /* ===== MY KEYS (preferred key picker on Settings) ===== */
 .my-keys-help {
     font-size: 0.9em;
