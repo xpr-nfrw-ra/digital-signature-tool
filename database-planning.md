@@ -27,6 +27,8 @@ npx prisma studio    # opens a browser UI at http://localhost:5555
 
 ### Inspecting column constraints
 
+**Short answer — what places and enforces these restrictions?** Length and shape rules are enforced at the API boundary in [server/validators.js](server/validators.js). Every write route (`auth.js`, `keys.js`, `signatures.js`) calls `validate()` before touching the database, so invalid input is rejected with a 400 before Prisma ever sees it. SQLite itself only enforces types, `NOT NULL`, `UNIQUE`, and foreign keys (declared in `prisma/schema.prisma`); it ignores `VARCHAR(n)` and has no regex support, which is why the app layer owns length and character-class rules.
+
 Constraints live in three places — check all three when verifying a column's rules:
 
 1. **Prisma schema** (`prisma/schema.prisma`) — the canonical source. Types, nullability, `@unique`, `@default`, FK relations and `onDelete` are declared here.
@@ -39,7 +41,7 @@ Constraints live in three places — check all three when verifying a column's r
    sqlite3 dev.db "PRAGMA index_list(<table>);"          # indexes (including UNIQUE)
    ```
 
-3. **API-layer caps** — SQLite ignores `VARCHAR(n)` length limits, so length caps (`username` ≤ 32, `document_name` ≤ 255, fingerprint fixed-length hex, etc.) are enforced in [server/validators.js](server/validators.js). Anything not declared there is not enforced.
+3. **API-layer caps and shape rules** — SQLite ignores `VARCHAR(n)` length limits and has no character-class constraints, so both length caps and character/format rules (regex patterns, forbidden characters, exact lengths for crypto-derived fields) are enforced in [server/validators.js](server/validators.js). Anything not declared there is not enforced. The `LIMITS` object is the source of truth — see it for the exact rule per field.
 
 ### Making schema changes
 
@@ -79,7 +81,7 @@ The `──<` symbol denotes a **one-to-many** relationship: one user can have m
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER (PK) | Auto-incrementing unique ID |
-| `username` | TEXT (unique) | Username — must be unique |
+| `username` | TEXT (unique) | Username — must be unique. App-enforced: 3–32 chars, `^[a-zA-Z0-9_.-]+$` (letters, digits, `.`, `_`, `-`) |
 | `password_hash` | TEXT | bcrypt-hashed password |
 | `created_at` | DATETIME | Registration timestamp |
 
@@ -123,8 +125,8 @@ The `──<` symbol denotes a **one-to-many** relationship: one user can have m
 |--------|------|-------------|
 | `id` | INTEGER (PK) | Auto-incrementing ID |
 | `user_id` | INTEGER (FK) | Who signed — reference to `users.id` |
-| `document_name` | TEXT | Filename or label of the signed document (≤ 255 chars, app-enforced) |
-| `document_hash` | TEXT | Hash of the signed content (hex, ≤ 128 chars) |
+| `document_name` | TEXT | Filename or label of the signed document. App-enforced: 1–255 chars, no control chars, no `/` or `\` |
+| `document_hash` | TEXT | Hash of the signed content. App-enforced: hex, exactly 64 / 96 / 128 chars (SHA-256 / 384 / 512) |
 | `public_key_id` | INTEGER (FK) | Which key signed — reference to `public_keys.id` |
 | `signed_at` | DATETIME | Signing timestamp |
 
@@ -146,9 +148,9 @@ The `──<` symbol denotes a **one-to-many** relationship: one user can have m
 |--------|------|-------------|
 | `id` | INTEGER (PK) | Auto-incrementing ID |
 | `user_id` | INTEGER (FK) | Reference to `users.id` |
-| `fingerprint` | TEXT (unique) | Key fingerprint — links to `signature_log` |
-| `public_key_pem` | TEXT | Public key in PEM format |
-| `label` | TEXT | User-defined name (e.g. "Work Key") |
+| `fingerprint` | TEXT (unique) | Key fingerprint — links to `signature_log`. App-enforced: exactly 64 hex chars (SHA-256 of DER SPKI) |
+| `public_key_pem` | TEXT | Public key in PEM format. App-enforced: 100–8192 chars, must match `-----BEGIN PUBLIC KEY-----…-----END PUBLIC KEY-----` |
+| `label` | TEXT | User-defined name (e.g. "Work Key"). App-enforced: 1–64 chars, no control chars |
 | `created_at` | DATETIME | Creation timestamp |
 
 **Relation:** `user_id` → `users.id`
