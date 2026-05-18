@@ -165,6 +165,17 @@ logoutButton.addEventListener('click', async () => {
     document.getElementById('username').value = '';
     document.getElementById('password').value = '';
     document.getElementById('confirmPassword').value = '';
+
+    // Wipe per-user state from each section so the next user (or guest) starts
+    // with empty inputs and no leftover keys/files/results in memory.
+    if (typeof window.resetSigningForm === 'function') window.resetSigningForm();
+    if (typeof window.resetVerificationForm === 'function') window.resetVerificationForm();
+    if (typeof window.resetAccountForms === 'function') window.resetAccountForms();
+
+    // Reset app-wide settings to defaults so a fresh login starts clean and the
+    // previous user's hash/sig/keySize choices don't bleed into a guest session.
+    if (typeof window.applyDefaultSettings === 'function') window.applyDefaultSettings();
+
     mainApp.classList.remove('active');
     loginPage.style.display = 'flex';
     setRegisterMode(false);

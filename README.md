@@ -6,10 +6,11 @@ This branch (`main`) runs over HTTPS using a proper 3-tier PKI: Root CA → Inte
 
 ## Features
 
-- **File Signing** — sign any file with an RSA private key (client-side; logged to your audit history when signed in)
-- **Signature Verification** — verify a file against a public key, either uploaded or looked up server-side
+- **File Signing** — sign any file with an RSA private key (client-side; logged to your audit history when signed in). The `.sig` file is a self-describing JSON envelope `{ v, alg, hash, sig }`, so verifiers don't need to match the signer's algorithm settings manually.
+- **Signature Verification** — verify a file against a public key, either uploaded or looked up server-side. The verify page has its own algorithm picker that auto-fills (and locks) from the `.sig` envelope; for legacy raw-base64 signatures, the user can set the algorithm and hash for that single verification without touching their saved settings.
 - **Key Generation** — generate RSA key pairs (2048 / 3072 / 4096 bits); the public half is auto-registered for logged-in users
-- **Public Key Directory** — a user can register multiple public keys; verifiers look them up by exact username (returns all of that user's keys) or by fingerprint (returns the single matching key). The `default_public_key_id` setting is a personal bookmark only — it does not restrict which of your keys others can find.
+- **Public Key Directory** — a user can register multiple public keys; verifiers look them up by exact username (returns all of that user's keys) or by fingerprint (returns the single matching key).
+- **Preferred Public Key** — Settings → "My Public Keys" lists all of a user's registered keys with a radio-button picker for the preferred one. Stored in `user_settings.default_public_key_id`; it is a personal bookmark only — it does not hide or restrict which of your keys others can find.
 - **User Accounts & Settings** — session-based auth (sessions persisted across restarts); per-user crypto preferences saved server-side
 - **Guest Mode** — use signing/verification without an account
 
@@ -19,6 +20,15 @@ This branch (`main`) runs over HTTPS using a proper 3-tier PKI: Root CA → Inte
 - [OpenSSL](https://www.openssl.org/) 1.1+ on your PATH (`openssl version` to verify)
 
 ## Setup & Running
+
+### Convenience scripts (Windows)
+
+Two `.bat` scripts in the repo root wrap the steps below:
+
+- `setup.bat` — runs `npm install`, `npx prisma migrate deploy`, and the cert generator. Use it once after cloning.
+- `start.bat` — opens two cmd windows, one running `npm start` (server) and one running `npx prisma studio` (DB inspector).
+
+Double-click either, or run from any terminal. The manual steps below still work if you prefer them.
 
 ### 1. Install dependencies
 

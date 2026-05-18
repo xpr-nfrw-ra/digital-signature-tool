@@ -153,40 +153,35 @@ async function signFile(fileData, privateKeyPem, hashAlgorithm, algorithm) {
     }
 }
 
-// Verify signature with RSA
+// Verify signature with RSA.
+// Treats any internal forge error (mismatched modulus size, malformed signature
+// bytes, hash/key size mismatch, etc.) as a verification failure — i.e. returns
+// false rather than throwing. The caller renders this as INVALID, which matches
+// the user's mental model: a signature that can't be matched against this file
+// + key is not valid, regardless of *why*. Only PEM parse errors throw, since
+// those mean the public key itself is unusable.
 async function verifySignatureRSA(fileData, signatureBase64, publicKeyPem, hashAlgorithm) {
+    const publicKey = forge.pki.publicKeyFromPem(publicKeyPem);
     try {
-        // Parse public key
-        const publicKey = forge.pki.publicKeyFromPem(publicKeyPem);
-        
-        // Create hash of file
         const md = forge.md[hashAlgorithm].create();
         md.update(forge.util.binary.raw.encode(new Uint8Array(fileData)));
-        
-        // Decode signature from base64
         const signature = forge.util.decode64(signatureBase64);
-        
-        // Verify signature
         return publicKey.verify(md.digest().bytes(), signature);
     } catch (error) {
-        throw new Error('Failed to verify RSA signature: ' + error.message);
+        return false;
     }
 }
 
-// Verify signature with ECDSA
+// Verify signature with ECDSA. Same failure semantics as RSA above.
 async function verifySignatureECDSA(fileData, signatureBase64, publicKeyPem, hashAlgorithm) {
+    const publicKey = forge.pki.publicKeyFromPem(publicKeyPem);
     try {
-        // For ECDSA, we use the same approach as RSA in forge.js
-        const publicKey = forge.pki.publicKeyFromPem(publicKeyPem);
-        
         const md = forge.md[hashAlgorithm].create();
         md.update(forge.util.binary.raw.encode(new Uint8Array(fileData)));
-        
         const signature = forge.util.decode64(signatureBase64);
-        
         return publicKey.verify(md.digest().bytes(), signature);
     } catch (error) {
-        throw new Error('Failed to verify ECDSA signature: ' + error.message);
+        return false;
     }
 }
 
