@@ -73,6 +73,7 @@ function applySettingsToUI(s) {
     appSettings.hashAlgorithm = s.hashAlgorithm;
     appSettings.signatureAlgorithm = s.signatureAlgorithm;
     appSettings.keySize = String(s.keySize);
+    appSettings.defaultPublicKeyId = s.defaultPublicKeyId ?? null;
     hashAlgorithm.value = s.hashAlgorithm;
     signatureAlgorithm.value = s.signatureAlgorithm;
     keySize.value = String(s.keySize);
@@ -84,6 +85,9 @@ async function loadSettingsFromServer() {
         if (!res.ok) return; // guest or not logged in
         const { settings } = await res.json();
         applySettingsToUI(settings);
+        if (typeof window.loadMyKeys === 'function') {
+            window.loadMyKeys();
+        }
     } catch (e) {
         // server unreachable — keep client defaults
     }
@@ -119,6 +123,93 @@ keySize.addEventListener('change', (e) => {
 
 // Expose for auth.js to call after successful login.
 window.loadSettingsFromServer = loadSettingsFromServer;
+
+// ===== MY KEYS (preferred public key) =====
+const myKeysList = document.getElementById('myKeysList');
+const myKeysStatus = document.getElementById('myKeysStatus');
+
+function shortFp(fp) {
+    return fp.length > 16 ? `${fp.slice(0, 8)}…${fp.slice(-8)}` : fp;
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+}
+
+function renderMyKeys(keys, preferredId) {
+    myKeysList.innerHTML = '';
+    if (!keys.length) {
+        myKeysStatus.textContent = 'You have no registered public keys yet. Generate one from the File Signing page.';
+        myKeysStatus.style.display = 'block';
+        return;
+    }
+    myKeysStatus.style.display = 'none';
+
+    const items = [{ id: null, label: '(no preferred key)', fingerprint: '' }, ...keys];
+    for (const k of items) {
+        const li = document.createElement('li');
+        li.className = 'my-keys-item';
+        const isPreferred = (k.id === preferredId) || (k.id === null && preferredId == null);
+        const inputId = k.id == null ? 'pref-key-none' : `pref-key-${k.id}`;
+        li.innerHTML = `
+            <label for="${inputId}" class="my-keys-row">
+                <input type="radio" name="preferredKey" id="${inputId}" value="${k.id == null ? '' : k.id}" ${isPreferred ? 'checked' : ''} />
+                <span class="my-keys-label">${escapeHtml(k.label)}</span>
+                ${k.fingerprint ? `<span class="my-keys-fp" title="${escapeHtml(k.fingerprint)}">${shortFp(k.fingerprint)}</span>` : ''}
+            </label>
+        `;
+        myKeysList.appendChild(li);
+    }
+
+    myKeysList.querySelectorAll('input[name="preferredKey"]').forEach(input => {
+        input.addEventListener('change', async () => {
+            const raw = input.value;
+            const newId = raw === '' ? null : Number(raw);
+            const prev = appSettings.defaultPublicKeyId;
+            appSettings.defaultPublicKeyId = newId;
+            try {
+                const res = await fetch('/api/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ defaultPublicKeyId: newId }),
+                });
+                if (!res.ok) throw new Error('save failed');
+            } catch (e) {
+                appSettings.defaultPublicKeyId = prev;
+                renderMyKeys(keys, prev);
+            }
+        });
+    });
+}
+
+async function loadMyKeys() {
+    if (!myKeysList) return;
+    try {
+        const res = await fetch('/api/keys/mine');
+        if (!res.ok) {
+            myKeysStatus.textContent = 'Log in to manage your preferred signing key.';
+            myKeysList.innerHTML = '';
+            return;
+        }
+        const { keys } = await res.json();
+        renderMyKeys(keys, appSettings.defaultPublicKeyId ?? null);
+    } catch (e) {
+        myKeysStatus.textContent = 'Could not load your keys.';
+        myKeysList.innerHTML = '';
+    }
+}
+
+// Re-fetch the key list whenever the user opens the Settings page —
+// they may have generated a new key from the Signing page in the meantime.
+navItems.forEach(item => {
+    if (item.getAttribute('data-section') === 'settings') {
+        item.addEventListener('click', loadMyKeys);
+    }
+});
+
+window.loadMyKeys = loadMyKeys;
 
 // ===== ACCOUNT (change username / change password) =====
 
