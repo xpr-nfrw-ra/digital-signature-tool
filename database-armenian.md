@@ -39,7 +39,7 @@ npx prisma migrate reset
 
 ### Որտեղ են սահմանված և կիրառվում սահմանափակումները
 
-**Կարճ պատասխան.** Երկարության և ձևի (regex, արգելված նիշեր, ճշգրիտ երկարություն) կանոնները կիրառվում են API-ի մուտքում՝ [server/validators.js](digital-signature-tool/server/validators.js) ֆայլում։ Բոլոր write route-երը (`auth.js`, `keys.js`, `signatures.js`) կանչում են `validate()` մինչ տվյալների բազային դիմելը, և անվավեր մուտքը մերժվում է 400 պատասխանով՝ դեռ Prisma-ից առաջ։ SQLite-ն ինքնին կիրառում է միայն տիպերը, `NOT NULL`-ը, `UNIQUE`-ը և օտար բանալիները (հայտարարված `prisma/schema.prisma`-ում); այն անտեսում է `VARCHAR(n)` երկարությունը և չունի regex աջակցություն — այդ պատճառով երկարության և նիշերի դասի կանոնները կրում է հավելվածի մակարդակը։
+**Կարճ պատասխան.** Երկարության և ձևի (regex, արգելված նիշեր, ճշգրիտ երկարություն) կանոնները կիրառվում են API-ի մուտքում՝ [server/validators.js](server/validators.js) ֆայլում։ Բոլոր write route-երը (`auth.js`, `keys.js`, `signatures.js`) կանչում են `validate()` մինչ տվյալների բազային դիմելը, և անվավեր մուտքը մերժվում է 400 պատասխանով՝ դեռ Prisma-ից առաջ։ SQLite-ն ինքնին կիրառում է միայն տիպերը, `NOT NULL`-ը, `UNIQUE`-ը և օտար բանալիները (հայտարարված `prisma/schema.prisma`-ում); այն անտեսում է `VARCHAR(n)` երկարությունը և չունի regex աջակցություն — այդ պատճառով երկարության և նիշերի դասի կանոնները կրում է հավելվածի մակարդակը։
 
 Սահմանափակումները բնակվում են երեք տեղում — բոլոր երեքն էլ ստուգեք, երբ ստուգում եք սյունի կանոնները.
 
@@ -53,7 +53,7 @@ npx prisma migrate reset
    sqlite3 dev.db "PRAGMA index_list(<table>);"
    ```
 
-3. **API մակարդակի սահմաններ և ձևի կանոններ** — SQLite-ը անտեսում է `VARCHAR(n)`-ը և չունի նիշերի դասերի սահմանափակում, ուստի թե՛ երկարության սահմանները, թե՛ ձևի կանոնները (regex, արգելված նիշեր, ճշգրիտ երկարություններ) կիրառվում են [server/validators.js](digital-signature-tool/server/validators.js)-ում։ `LIMITS` օբյեկտը հանդիսանում է ճշմարտության աղբյուր — տես այնտեղ դաշտերի ճշգրիտ կանոնները։
+3. **API մակարդակի սահմաններ և ձևի կանոններ** — SQLite-ը անտեսում է `VARCHAR(n)`-ը և չունի նիշերի դասերի սահմանափակում, ուստի թե՛ երկարության սահմանները, թե՛ ձևի կանոնները (regex, արգելված նիշեր, ճշգրիտ երկարություններ) կիրառվում են [server/validators.js](server/validators.js)-ում։ `LIMITS` օբյեկտը հանդիսանում է ճշմարտության աղբյուր — տես այնտեղ դաշտերի ճշգրիտ կանոնները։
 
 ---
 
@@ -99,10 +99,11 @@ users ──1 user_settings
 | `user_id` | INTEGER (FK, nullable) | Կապ `users.id`-ի հետ — `null` է անանուն նստաշրջանների համար |
 | `session_data` | TEXT | JSON ձևաչափով կոդավորված նստաշրջանի տվյալներ |
 | `expires_at` | DATETIME (indexed) | Ժամկետի ավարտ |
+| `created_at` | DATETIME | Տողի ստեղծման ժամ — երբեք չի թարմացվում |
 
 **Կապ.** `user_id` → `users.id` (CASCADE — օգտատիրոջ ջնջման դեպքում նստաշրջաններն էլ ջնջվում են)։
 
-**Իրականացում.** [server/sessionStore.js](digital-signature-tool/server/sessionStore.js) — express-session-ի համար գրված անհատական `Store`, որը պահոցը պահում է Prisma-ով։ Ժամկետանց տողերը ջնջվում են սերվերի մեկնարկին `cleanupExpiredSessions()` ֆունկցիայով և ընթացքի մեջ՝ ժամկետանց տողերը կարդալիս։
+**Իրականացում.** [server/sessionStore.js](server/sessionStore.js) — express-session-ի համար գրված անհատական `Store`, որը պահոցը պահում է Prisma-ով։ Ժամկետանց տողերը ջնջվում են սերվերի մեկնարկին `cleanupExpiredSessions()` ֆունկցիայով և ընթացքի մեջ՝ ժամկետանց տողերը կարդալիս։
 
 ---
 
@@ -125,7 +126,7 @@ users ──1 user_settings
 
 **Կրիպտոն.** Ստորագրման գործողությունը ամբողջությամբ կատարվում է բրաուզերում (forge.js-ի միջոցով)։ Տվյալների բազան պահում է *ապացույց* ստորագրման մասին, ոչ թե կատարում կրիպտոգրաֆիկ գործողություն։
 
-**Չափի սահմանափակումներ.** SQLite-ը VARCHAR երկարությունը չի կիրառում։ Վերը նշված սահմանաչափերը ստուգվում են API մակարդակում՝ [server/validators.js](digital-signature-tool/server/validators.js) ֆայլում։
+**Չափի սահմանափակումներ.** SQLite-ը VARCHAR երկարությունը չի կիրառում։ Վերը նշված սահմանաչափերը ստուգվում են API մակարդակում՝ [server/validators.js](server/validators.js) ֆայլում։
 
 ---
 
@@ -192,9 +193,9 @@ users ──1 user_settings
 │data     │ │document_hash │ │print     │ │key_size      │
 │expires_ │ │public_key_id ├─┤public_   │ │default_pk_id?│
 │at       │ │signed_at     │ │key_pem   │ │updated_at    │
-└─────────┘ └──────────────┘ │label     │ └──────────────┘
-                             │created_at│
-                             └──────────┘
+│created_ │ └──────────────┘ │label     │ └──────────────┘
+│at       │                  │created_at│
+└─────────┘                  └──────────┘
 
 signature_log.public_key_id → public_keys.id (FK)
 user_settings.default_public_key_id → public_keys.id (FK, nullable)
@@ -210,7 +211,7 @@ user_settings.default_public_key_id → public_keys.id (FK, nullable)
 
 ### 1. Սերվերի կողմից — Prisma Client (հիմնական եղանակ)
 
-Հավելվածի ողջ կոդը հարցումները կատարում է Prisma-ի typed JS client-ի միջոցով (`prisma.user`, `prisma.publicKey` և այլն)։ Client-ը import-վում է [server/userStore.js](digital-signature-tool/server/userStore.js) ֆայլում, և յուրաքանչյուր router օգտագործում է այն ուղղակիորեն։
+Հավելվածի ողջ կոդը հարցումները կատարում է Prisma-ի typed JS client-ի միջոցով (`prisma.user`, `prisma.publicKey` և այլն)։ Client-ը import-վում է [server/userStore.js](server/userStore.js) ֆայլում, և յուրաքանչյուր router օգտագործում է այն ուղղակիորեն։
 
 ```js
 // Օգտատերի որոնում (auth.js)
