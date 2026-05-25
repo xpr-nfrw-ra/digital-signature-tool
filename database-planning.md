@@ -442,9 +442,16 @@ All cryptographic operations (signing, verification, key generation) are perform
 
 ## Future Phase
 
-For the planned backend phase of the project:
+All five tables are now fully integrated into the application:
 
-- `signature_log` — will power "who signed what, and when" queries
-- `public_keys` — enables live key exchange in multi-user verification workflows
+- `users`, `sessions` — registration, login, and the Prisma-backed session store.
+- `signature_log` — powers "who signed what, and when" via `POST /api/signatures` and `GET /api/signatures/mine`.
+- `public_keys` — server-side key storage and lookup for verification (`POST /api/keys`, `GET /api/keys/by-username/:u`, `GET /api/keys/by-fingerprint/:fp`).
+- `user_settings` — per-user crypto/UI preferences and default-key bookmark.
 
-Currently, only the `users` table is fully integrated into the application logic. The remaining tables are schema-ready for future functionality.
+What remains genuinely future (see the sections above for detail):
+
+- **Account deletion** — not implemented; only username/password change exist.
+- **Rate limiting on `/api/auth/login`** — none yet; brute-force is currently possible.
+- **Admin roles / system-wide views** — deliberately deferred (see "Decision: no roles, no admin"). Would add a `users.role` column plus `requireAdmin` middleware.
+- **"Manage active sessions" UI** — would require storing IP / user-agent / `last_seen_at`, intentionally not stored today.
