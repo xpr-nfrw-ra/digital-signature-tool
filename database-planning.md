@@ -166,7 +166,7 @@ The `──<` symbol denotes a **one-to-many** relationship: one user can have m
 | Column | Type | Description |
 |--------|------|-------------|
 | `user_id` | INTEGER (PK, FK) | Owner — also primary key (1-to-1 with `users.id`) |
-| `hash_algorithm` | TEXT | `sha256` \| `sha384` \| `sha512` (SHA-3 intentionally not supported — forge.js doesn't ship it and no compelling use case here; see PHASE2.md §8) |
+| `hash_algorithm` | TEXT | `sha256` \| `sha384` \| `sha512` (SHA-3 intentionally not supported — forge.js doesn't ship it and no compelling use case here) |
 | `signature_algorithm` | TEXT | `rsa` \| `ecdsa` |
 | `key_size` | INTEGER | `2048` \| `3072` \| `4096` |
 | `default_public_key_id` | INTEGER (FK, nullable) | Bookmark of the user's preferred signing key. Does **not** restrict which keys are stored or returned by lookups — a user can have many keys in `public_keys` and all of them are searchable. |
