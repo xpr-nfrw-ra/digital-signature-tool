@@ -10,3 +10,6 @@ dev.db-shm
 
 # Prisma generated client (rebuilt via `npm install`)
 /generated/prisma
+
+# Local planning notes
+backend-phases.txt
