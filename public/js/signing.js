@@ -26,16 +26,10 @@ generateKeyButton.addEventListener('click', () => {
         'sha512': 'SHA-512'
     };
     
-    // Display key size with proper units
-    let keySizeDisplay = appSettings.keySize + ' bits';
-    if (appSettings.signatureAlgorithm === 'ecdsa') {
-        const curveNames = {
-            '2048': 'P-256',
-            '3072': 'P-384',
-            '4096': 'P-521'
-        };
-        keySizeDisplay = appSettings.keySize + ' bits (' + curveNames[appSettings.keySize] + ')';
-    }
+    // Display key size with proper units (ECDSA: the curve this size tier maps to)
+    const keySizeDisplay = appSettings.signatureAlgorithm === 'ecdsa'
+        ? ECDSA_CURVES[appSettings.keySize] + ' curve'
+        : appSettings.keySize + ' bits';
     
     document.getElementById('modalAlgorithm').textContent = algoNames[appSettings.signatureAlgorithm];
     document.getElementById('modalKeySize').textContent = keySizeDisplay;
@@ -66,13 +60,9 @@ confirmGenerate.addEventListener('click', async () => {
         cancelGenerate.disabled = true;
         keygenProgress.classList.add('show');
 
-        // Generate key pair with selected algorithm
-        const keypair = await generateKeyPair(appSettings.keySize, appSettings.signatureAlgorithm);
-        
-        // Convert to PEM format
-        const privateKeyPem = forge.pki.privateKeyToPem(keypair.privateKey);
-        const publicKeyPem = forge.pki.publicKeyToPem(keypair.publicKey);
-        
+        // Generate key pair (PEM) with selected algorithm
+        const { privateKeyPem, publicKeyPem } = await generateKeyPair(appSettings.keySize, appSettings.signatureAlgorithm);
+
         // Store private key for auto-fill
         generatedPrivateKey = privateKeyPem;
         
@@ -206,20 +196,16 @@ signButton.addEventListener('click', async () => {
         // Read or use generated private key
         const privateKeyPem = generatedPrivateKey || await readFileAsText(keyInput.files[0]);
         
-        // Sign the file with selected algorithm
-        const signature = await signFile(
-            fileData,
-            privateKeyPem,
-            appSettings.hashAlgorithm,
-            appSettings.signatureAlgorithm
-        );
+        // Sign the file. The algorithm comes from the key itself (an RSA key always
+        // signs with RSA, an EC key with ECDSA), whatever the settings say.
+        const { alg, signature } = await signFile(fileData, privateKeyPem, appSettings.hashAlgorithm);
 
         // Wrap in a self-describing envelope so the verifier knows which algorithm
         // and hash to use — without this, verification depends on the verifier's
         // current settings and breaks for anyone but the signer.
         const sigEnvelope = JSON.stringify({
             v: 1,
-            alg: appSettings.signatureAlgorithm,
+            alg,
             hash: appSettings.hashAlgorithm,
             sig: signature,
         });
@@ -233,7 +219,7 @@ signButton.addEventListener('click', async () => {
         if (currentUser) {
             try {
                 const documentHash = hashFileHex(fileData, appSettings.hashAlgorithm);
-                const publicKeyFingerprint = fingerprintFromPrivateKeyPem(privateKeyPem);
+                const publicKeyFingerprint = await fingerprintFromPrivateKeyPem(privateKeyPem);
                 const res = await fetch('/api/signatures', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -253,8 +239,10 @@ signButton.addEventListener('click', async () => {
         }
 
         signingProgress.classList.remove('show');
-        const algoName = appSettings.signatureAlgorithm.toUpperCase();
-        alert(`File signed successfully with ${algoName}! Signature file downloaded.` + logNote);
+        const keyNote = alg !== appSettings.signatureAlgorithm
+            ? `\n(Your settings say ${appSettings.signatureAlgorithm.toUpperCase()}, but this is an ${alg.toUpperCase()} key, so it signed with ${alg.toUpperCase()}.)`
+            : '';
+        alert(`File signed successfully with ${alg.toUpperCase()}! Signature file downloaded.` + keyNote + logNote);
         
     } catch (error) {
         signingProgress.classList.remove('show');

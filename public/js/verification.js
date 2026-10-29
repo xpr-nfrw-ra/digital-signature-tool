@@ -11,7 +11,6 @@ const lookupQuery = document.getElementById('lookupQuery');
 const lookupButton = document.getElementById('lookupButton');
 const lookupResult = document.getElementById('lookupResult');
 const verifyHashSelect = document.getElementById('verifyHash');
-const verifySigAlgSelect = document.getElementById('verifySigAlg');
 const verifyAlgoNote = document.getElementById('verifyAlgoNote');
 const signatureFileInput = document.getElementById('signatureFile');
 
@@ -48,8 +47,7 @@ async function onSignatureFilePicked() {
     const file = signatureFileInput.files[0];
     if (!file) {
         verifyHashSelect.disabled = false;
-        verifySigAlgSelect.disabled = false;
-        verifyAlgoNote.textContent = 'Pick a signature file to auto-detect, or set manually for legacy files. Your account settings are not affected.';
+        verifyAlgoNote.textContent = 'Pick a signature file to auto-detect, or set manually for legacy files. RSA or ECDSA is detected from the public key. Your account settings are not affected.';
         verifyAlgoNote.className = 'verify-algo-note';
         return;
     }
@@ -58,21 +56,17 @@ async function onSignatureFilePicked() {
         const parsed = parseSignatureFile(text);
         if (parsed.alg && parsed.hash) {
             verifyHashSelect.value = parsed.hash;
-            verifySigAlgSelect.value = parsed.alg;
             verifyHashSelect.disabled = true;
-            verifySigAlgSelect.disabled = true;
             verifyAlgoNote.textContent = `Auto-detected from signature file: ${parsed.alg.toUpperCase()} with ${parsed.hash.toUpperCase()}.`;
             verifyAlgoNote.className = 'verify-algo-note detected';
         } else {
             verifyHashSelect.disabled = false;
-            verifySigAlgSelect.disabled = false;
-            verifyAlgoNote.textContent = 'Legacy signature file (no embedded algorithm). Choose the algorithm and hash the signer used.';
+            verifyAlgoNote.textContent = 'Legacy signature file (no embedded algorithm). Choose the hash the signer used; RSA or ECDSA is detected from the public key.';
             verifyAlgoNote.className = 'verify-algo-note legacy';
         }
     } catch (e) {
         verifyHashSelect.disabled = false;
-        verifySigAlgSelect.disabled = false;
-        verifyAlgoNote.textContent = 'Could not read signature file. Choose the algorithm manually.';
+        verifyAlgoNote.textContent = 'Could not read signature file. Choose the hash manually.';
         verifyAlgoNote.className = 'verify-algo-note legacy';
     }
 }
@@ -115,12 +109,10 @@ window.resetVerificationForm = function() {
     verificationResult.classList.remove('show', 'valid', 'invalid');
     verifyingProgress.classList.remove('show');
 
-    // Reset the verify-only algorithm picker back to defaults and unlocked.
+    // Reset the verify-only hash picker back to its default and unlocked.
     verifyHashSelect.value = 'sha256';
-    verifySigAlgSelect.value = 'rsa';
     verifyHashSelect.disabled = false;
-    verifySigAlgSelect.disabled = false;
-    verifyAlgoNote.textContent = 'Pick a signature file to auto-detect, or set manually for legacy files. Your account settings are not affected.';
+    verifyAlgoNote.textContent = 'Pick a signature file to auto-detect, or set manually for legacy files. RSA or ECDSA is detected from the public key. Your account settings are not affected.';
     verifyAlgoNote.className = 'verify-algo-note';
 };
 
@@ -214,27 +206,20 @@ verifyButton.addEventListener('click', async () => {
         // Prefer the looked-up key over the file input if the user picked one.
         const publicKeyPem = lookedUpPublicKeyPem || await readFileAsText(pubKeyInput.files[0]);
 
-        // Parse the signature envelope to get the raw signature bytes. The
-        // algorithm and hash come from the verify-page dropdowns, which were
-        // auto-populated from the envelope (locked) or filled by the user
-        // for legacy files. appSettings is never consulted here — verifying
-        // someone else's signature does not depend on the verifier's settings.
+        // Parse the signature envelope to get the raw signature bytes. The hash
+        // comes from the verify-page dropdown, auto-populated from the envelope
+        // (locked) or filled by the user for legacy files; RSA vs ECDSA is taken
+        // from the public key itself. appSettings is never consulted here —
+        // verifying someone else's signature does not depend on the verifier's settings.
         const parsed = parseSignatureFile(sigFileText);
         const hashAlg = verifyHashSelect.value;
-        const sigAlg = verifySigAlgSelect.value;
 
-        const isValid = await verifySignature(
-            fileData,
-            parsed.sig,
-            publicKeyPem,
-            hashAlg,
-            sigAlg
-        );
+        const { alg, valid: isValid } = await verifySignature(fileData, parsed.sig, publicKeyPem, hashAlg);
 
         verifyingProgress.classList.remove('show');
         verificationResult.classList.add('show');
 
-        const usedDetail = ` (${sigAlg.toUpperCase()} / ${hashAlg.toUpperCase()})`;
+        const usedDetail = ` (${alg.toUpperCase()} / ${hashAlg.toUpperCase()})`;
         if (isValid) {
             verificationResult.classList.add('valid');
             verificationResult.classList.remove('invalid');

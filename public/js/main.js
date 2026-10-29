@@ -69,6 +69,16 @@ const hashAlgorithm = document.getElementById('hashAlgorithm');
 const signatureAlgorithm = document.getElementById('signatureAlgorithm');
 const keySize = document.getElementById('keySize');
 
+// The key-size setting is stored as an RSA bit size; for ECDSA each option stands for
+// a curve (see ECDSA_CURVES in crypto.js), so relabel the options to match.
+function updateKeySizeLabels() {
+    for (const option of keySize.options) {
+        option.textContent = signatureAlgorithm.value === 'ecdsa'
+            ? ECDSA_CURVES[option.value]
+            : option.value + ' bits';
+    }
+}
+
 function applySettingsToUI(s) {
     appSettings.hashAlgorithm = s.hashAlgorithm;
     appSettings.signatureAlgorithm = s.signatureAlgorithm;
@@ -77,6 +87,7 @@ function applySettingsToUI(s) {
     hashAlgorithm.value = s.hashAlgorithm;
     signatureAlgorithm.value = s.signatureAlgorithm;
     keySize.value = String(s.keySize);
+    updateKeySizeLabels();
 }
 
 async function loadSettingsFromServer() {
@@ -113,6 +124,7 @@ hashAlgorithm.addEventListener('change', (e) => {
 
 signatureAlgorithm.addEventListener('change', (e) => {
     appSettings.signatureAlgorithm = e.target.value;
+    updateKeySizeLabels();
     persistSetting({ signatureAlgorithm: e.target.value });
 });
 
