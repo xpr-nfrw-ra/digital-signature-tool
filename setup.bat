@@ -1,26 +1,32 @@
 @echo off
 REM First-time setup for the signtool project (run this once after cloning).
-REM Installs dependencies, applies database migrations, and generates the
-REM self-signed HTTPS certificate used by the `main` branch.
+REM Creates .env, installs dependencies, applies database migrations, and
+REM generates the local Root CA -> Intermediate CA -> server certificate chain.
 
-cd /d "%~dp0digital-signature-tool"
+cd /d "%~dp0"
 
-echo === [1/3] Installing npm dependencies ===
+echo === [1/4] Installing npm dependencies ===
 call npm install
 if errorlevel 1 goto :fail
 
 echo.
-echo === [2/3] Applying Prisma migrations (creates dev.db) ===
+echo === [2/4] Creating .env with a random SESSION_SECRET ===
+if exist ".env" (
+    echo .env already exists - leaving it untouched.
+) else (
+    node -e "const fs=require('fs');const s=require('crypto').randomBytes(32).toString('hex');fs.writeFileSync('.env',fs.readFileSync('.env.example','utf8').replace(/^SESSION_SECRET=.*$/m,'SESSION_SECRET='+s))"
+    if errorlevel 1 goto :fail
+)
+
+echo.
+echo === [3/4] Applying Prisma migrations (creates dev.db) ===
 call npx prisma migrate deploy
 if errorlevel 1 goto :fail
 
 echo.
-echo === [3/3] Generating self-signed HTTPS certificate ===
-call npm run generate-certs
-if errorlevel 1 (
-    echo.
-    echo Cert generation skipped or failed - this is normal on the http-demo branch.
-)
+echo === [4/4] Generating HTTPS certificate chain (requires bash + openssl) ===
+call npm run generate-ca-chain
+if errorlevel 1 goto :fail
 
 echo.
 echo === Setup complete. Run start.bat to launch the server and Prisma Studio. ===

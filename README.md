@@ -16,8 +16,8 @@ This branch (`main`) runs over HTTPS using a proper 3-tier PKI: Root CA → Inte
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) v16 or higher
-- [OpenSSL](https://www.openssl.org/) 1.1+ on your PATH (`openssl version` to verify)
+- [Node.js](https://nodejs.org/) 20.19+, 22.12+, or 24+ (required by Prisma 7)
+- [OpenSSL](https://www.openssl.org/) 1.1+ and `bash` on your PATH (`openssl version` to verify; Git for Windows provides both)
 
 ## Setup & Running
 
@@ -25,7 +25,7 @@ This branch (`main`) runs over HTTPS using a proper 3-tier PKI: Root CA → Inte
 
 Two `.bat` scripts in the repo root wrap the steps below:
 
-- `setup.bat` — runs `npm install`, `npx prisma migrate deploy`, and the cert generator. Use it once after cloning.
+- `setup.bat` — runs `npm install`, creates `.env` with a random `SESSION_SECRET` (if missing), runs `npx prisma migrate deploy`, and generates the CA chain. Use it once after cloning; it's safe to re-run.
 - `start.bat` — opens two cmd windows, one running `npm start` (server) and one running `npx prisma studio` (DB inspector).
 
 Double-click either, or run from any terminal. The manual steps below still work if you prefer them.
@@ -38,7 +38,17 @@ npm install
 
 `postinstall` runs `prisma generate` automatically so the Prisma Client is built against the current schema.
 
-### 2. Initialize the database
+### 2. Create `.env`
+
+Copy `.env.example` to `.env` and set `SESSION_SECRET` to a random string of at least 32 characters:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+`DATABASE_URL` (default `file:./dev.db`, relative to the project root) is read by both the Prisma CLI and the server. The server refuses to start without a valid `SESSION_SECRET`. `.env` is gitignored.
+
+### 3. Initialize the database
 
 ```bash
 npx prisma migrate deploy
@@ -48,7 +58,7 @@ This creates `dev.db` (gitignored) and applies all migrations in `prisma/migrati
 
 To browse the data later: `npx prisma studio` (UI at <http://localhost:5555>). For a full reset: `npx prisma migrate reset`.
 
-### 3. Generate the CA chain (one-time)
+### 4. Generate the CA chain (one-time)
 
 ```bash
 npm run generate-ca-chain
@@ -63,7 +73,7 @@ This runs `scripts/gen-ca-chain.sh` and creates the following in `certs/`:
 | `server.key` / `server.crt` | Server cert — signed by Intermediate, 1 year |
 | `chain.crt` | Intermediate + Root bundle sent during TLS handshake |
 
-### 4. Trust the Root CA (optional but recommended)
+### 5. Trust the Root CA (optional but recommended)
 
 Without this step the browser shows a certificate warning. With it, you get a proper green padlock.
 
@@ -77,13 +87,13 @@ Without this step the browser shows a certificate warning. With it, you get a pr
 
 Restart the browser after importing.
 
-### 5. Start the server
+### 6. Start the server
 
 ```bash
 npm start
 ```
 
-### 6. Open the app
+### 7. Open the app
 
 Navigate to **https://localhost:3443**.
 

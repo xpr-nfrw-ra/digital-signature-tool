@@ -1,4 +1,11 @@
 // server.js - Express HTTPS server (OpenSSL CA chain)
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+
+if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
+    console.error('SESSION_SECRET is missing or shorter than 32 characters. Set it in .env (see .env.example).');
+    process.exit(1);
+}
+
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
@@ -25,7 +32,7 @@ app.use(express.json());
 // 2-hour sliding idle timeout: any authenticated request refreshes `expires_at`.
 const SESSION_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 app.use(session({
-    secret: 'dev-secret-change-in-production',
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     store: new PrismaSessionStore({ defaultMaxAgeMs: SESSION_MAX_AGE_MS }),

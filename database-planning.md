@@ -311,7 +311,7 @@ For SQLite, filesystem permissions *are* the DB-level role system. The OS alread
    chown signtool:signtool /var/lib/signtool/dev.db
    chmod 600 /var/lib/signtool/dev.db
    ```
-3. Set the app to load `SESSION_SECRET` from an environment variable rather than the hardcoded dev string in [server.js](server/server.js). Store it via the OS init system (systemd `EnvironmentFile=`) or a secrets manager — never in the repo.
+3. The app already reads `SESSION_SECRET` and `DATABASE_URL` from the environment (`.env` in dev, loaded by [server.js](server/server.js)). In production, supply them via the OS init system (systemd `EnvironmentFile=`) or a secrets manager instead of a `.env` in the repo directory — never commit them.
 4. Disable password SSH; require SSH keys (ideally + MFA via Google Authenticator / hardware key).
 
 **Admin-side access:**
