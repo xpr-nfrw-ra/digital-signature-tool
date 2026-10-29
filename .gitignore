@@ -20,3 +20,6 @@ test/.tmp/
 # Personal Claude Code settings and hooks
 .claude/settings.local.json
 .claude/hooks/
+
+# Playwright MCP output (screenshots, downloads)
+.playwright-mcp/
