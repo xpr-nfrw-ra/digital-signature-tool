@@ -843,3 +843,38 @@ body {
     font-size: 0.85em;
     color: #666;
 }
+
+/* Signing history (Settings) and "who signed this file?" (Verify) */
+.history-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 12px;
+}
+.history-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    padding: 10px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    background: #fafafa;
+}
+.history-item.matches-key {
+    border-color: #8fd19e;
+    background: #e8f6ec;
+}
+.history-main { flex: 1 1 10em; font-weight: 500; color: #333; overflow-wrap: anywhere; }
+.history-main.deleted { font-style: italic; color: #888; font-weight: 400; }
+.history-meta { font-size: 0.85em; color: #666; }
+.history-badge { flex-basis: 100%; font-size: 0.8em; color: #1f6b34; font-weight: 600; }
+
+.signers-box {
+    display: none;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #e0e0e0;
+}
+.signers-box.show { display: block; }
+.signers-box h3 { font-size: 1em; margin: 0 0 8px; color: #333; }

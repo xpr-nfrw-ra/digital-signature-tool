@@ -218,6 +218,16 @@ async function fingerprintFromPrivateKeyPem(privateKeyPem) {
     return bytesToHex(await crypto.subtle.digest('SHA-256', spki));
 }
 
+// SHA-256 fingerprint of a public-key PEM (RSA or EC): hash of the DER SPKI, as hex.
+async function fingerprintFromPublicKeyPem(publicKeyPem) {
+    return bytesToHex(await crypto.subtle.digest('SHA-256', pemToDer(publicKeyPem, 'PUBLIC KEY')));
+}
+
+// Hex digest using the browser's native hashing (fast for large files).
+async function digestHex(fileData, hashAlgorithm) {
+    return bytesToHex(await crypto.subtle.digest(webCryptoHash(hashAlgorithm), fileData));
+}
+
 // Hex digest of file content using the chosen hash algorithm.
 function hashFileHex(fileData, hashAlgorithm) {
     const md = forge.md[hashAlgorithm].create();

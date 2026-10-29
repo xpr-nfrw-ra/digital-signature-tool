@@ -11,6 +11,8 @@ This branch (`main`) runs over HTTPS using a proper 3-tier PKI: Root CA → Inte
 - **Key Generation** — generate RSA (2048 / 3072 / 4096 bits) or ECDSA (P-256 / P-384 / P-521) key pairs; the public half is auto-registered for logged-in users
 - **Standard formats** — keys are PEM (PKCS#1/PKCS#8 private, SPKI public); RSA signatures are PKCS#1 v1.5 and ECDSA signatures are DER, so both verify with OpenSSL, e.g. `openssl dgst -sha256 -verify pub.pem -signature sig.bin file` after base64-decoding the `sig` field. RSA uses forge.js; ECDSA uses the browser's Web Crypto API.
 - **Public Key Directory** — a user can register multiple public keys; verifiers look them up by exact username (returns all of that user's keys) or by fingerprint (returns the single matching key).
+- **Signing History** — Settings → "Signing History" lists the files you signed while logged in (name, time, key, hash algorithm), 20 at a time with "Load more".
+- **Who signed this file?** — on the verify page, picking a file looks it up in the signing log under all three hash algorithms and lists every recorded signer (deleted accounts shown as such). After a valid verification, the signer whose key you just verified with is highlighted. Logged-in users only.
 - **Preferred Public Key** — Settings → "My Public Keys" lists all of a user's registered keys with a radio-button picker for the preferred one. Stored in `user_settings.default_public_key_id`; it is a personal bookmark only — it does not hide or restrict which of your keys others can find.
 - **User Accounts & Settings** — session-based auth (sessions persisted across restarts); per-user crypto preferences saved server-side
 - **Guest Mode** — use signing/verification without an account

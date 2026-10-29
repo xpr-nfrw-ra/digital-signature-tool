@@ -224,11 +224,76 @@ async function loadMyKeys() {
     }
 }
 
-// Re-fetch the key list whenever the user opens the Settings page —
-// they may have generated a new key from the Signing page in the meantime.
+// ===== SIGNING HISTORY =====
+const historyList = document.getElementById('historyList');
+const historyStatus = document.getElementById('historyStatus');
+const historyMore = document.getElementById('historyMore');
+const HISTORY_PAGE_SIZE = 20;
+let historyCursor = null;
+
+// The stored hash's length tells which algorithm the signer used.
+const HASH_NAME_BY_HEX_LENGTH = { 64: 'SHA-256', 96: 'SHA-384', 128: 'SHA-512' };
+
+function historyItem(entry) {
+    const li = document.createElement('li');
+    li.className = 'history-item';
+    const name = document.createElement('span');
+    name.className = 'history-main';
+    name.textContent = entry.documentName;
+    name.title = entry.documentHash;
+    const meta = document.createElement('span');
+    meta.className = 'history-meta';
+    meta.textContent = [
+        new Date(entry.signedAt).toLocaleString(),
+        `${entry.publicKey.label} (${shortFp(entry.publicKey.fingerprint)})`,
+        HASH_NAME_BY_HEX_LENGTH[entry.documentHash.length] || '',
+    ].filter(Boolean).join('  ·  ');
+    li.append(name, meta);
+    return li;
+}
+
+function setHistoryStatus(text) {
+    historyStatus.textContent = text;
+    historyStatus.style.display = text ? 'block' : 'none';
+}
+
+// Loads the first page (reset) or the next page of the caller's signing history.
+async function loadSigningHistory(reset = true) {
+    if (reset) {
+        historyCursor = null;
+        historyList.replaceChildren();
+        historyMore.style.display = 'none';
+        setHistoryStatus('Loading your history…');
+    }
+    historyMore.disabled = true;
+    try {
+        const qs = `limit=${HISTORY_PAGE_SIZE}` + (historyCursor ? `&cursor=${historyCursor}` : '');
+        const res = await fetch('/api/signatures/mine?' + qs);
+        if (!res.ok) {
+            setHistoryStatus('Log in to see your signing history.');
+            return;
+        }
+        const { entries, nextCursor } = await res.json();
+        entries.forEach(e => historyList.appendChild(historyItem(e)));
+        historyCursor = nextCursor;
+        historyMore.style.display = nextCursor ? 'inline-block' : 'none';
+        setHistoryStatus(historyList.children.length ? '' : 'You haven\'t signed any files while logged in yet.');
+    } catch (e) {
+        setHistoryStatus('Could not load your signing history.');
+    } finally {
+        historyMore.disabled = false;
+    }
+}
+
+historyMore.addEventListener('click', () => loadSigningHistory(false));
+window.loadSigningHistory = loadSigningHistory;
+
+// Re-fetch keys and history whenever the user opens the Settings page —
+// they may have generated a key or signed a file in the meantime.
 navItems.forEach(item => {
     if (item.getAttribute('data-section') === 'settings') {
         item.addEventListener('click', loadMyKeys);
+        item.addEventListener('click', () => loadSigningHistory());
     }
 });
 
@@ -256,6 +321,16 @@ window.resetAccountForms = function() {
     if (myKeysStatus) {
         myKeysStatus.textContent = 'Loading your keys…';
         myKeysStatus.style.display = 'block';
+    }
+    // Signing history belongs to the previous user too.
+    const historyListEl = document.getElementById('historyList');
+    const historyStatusEl = document.getElementById('historyStatus');
+    const historyMoreEl = document.getElementById('historyMore');
+    if (historyListEl) historyListEl.replaceChildren();
+    if (historyMoreEl) historyMoreEl.style.display = 'none';
+    if (historyStatusEl) {
+        historyStatusEl.textContent = 'Loading your history…';
+        historyStatusEl.style.display = 'block';
     }
 };
 

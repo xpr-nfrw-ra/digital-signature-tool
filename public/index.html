@@ -180,6 +180,12 @@
                             <div class="result-status" id="resultStatus">VALID</div>
                             <div class="result-message" id="resultMessage">The file is authentic and has not been modified</div>
                         </div>
+
+                        <div class="signers-box" id="signersBox">
+                            <h3>Who signed this file?</h3>
+                            <div class="my-keys-status" id="signersStatus"></div>
+                            <ul class="history-list" id="signersList"></ul>
+                        </div>
                     </div>
                 </div>
 
@@ -230,6 +236,16 @@
                             <p class="my-keys-help">Choose which of your registered public keys is your preferred signing key. This is a personal bookmark — all your keys remain available for signing and lookup.</p>
                             <div id="myKeysStatus" class="my-keys-status">Loading your keys…</div>
                             <ul class="my-keys-list" id="myKeysList"></ul>
+                        </div>
+                    </div>
+
+                    <div class="card" id="historyCard">
+                        <div class="card-title">Signing History</div>
+                        <div class="settings-section">
+                            <p class="my-keys-help">Files you have signed while logged in, newest first. The server keeps only each file's name and hash, never the file itself.</p>
+                            <div id="historyStatus" class="my-keys-status">Loading your history…</div>
+                            <ul class="history-list" id="historyList"></ul>
+                            <button class="modal-button secondary" id="historyMore" style="display: none;">Load more</button>
                         </div>
                     </div>
 
