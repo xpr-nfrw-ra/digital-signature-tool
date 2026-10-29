@@ -156,6 +156,7 @@ Look for `Verify return code: 0 (ok)` to confirm the chain validates correctly.
 
 - Private keys are generated and used entirely in the browser; they are never sent to the server.
 - Passwords are hashed with bcrypt before storage.
+- Password-checking endpoints are rate limited: login and register per IP, username/password change per user (only wrong-password attempts count). Limited requests get `429` with a `Retry-After` header.
 - Sessions are persisted in SQLite via a Prisma-backed `express-session` store and survive server restarts. Cookies are HTTP-only and secure (HTTPS-only).
 - User data is stored in a local SQLite database (`dev.db`). The server stores only public keys, signing-event records, user credentials (bcrypt hashes), session blobs, and user settings — never private keys.
 - Public-key lookup is targeted: callers must supply an exact username or full fingerprint. There is no browse/list-all endpoint, which limits passive enumeration.

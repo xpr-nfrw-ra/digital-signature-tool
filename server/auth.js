@@ -5,14 +5,14 @@ const userStore = require('./userStore');
 const { prisma } = userStore;
 const { validate } = require('./validators');
 const { ensureSettings } = require('./settings');
-const { requireAuth } = require('./middleware');
+const { requireAuth, loginLimiter, registerLimiter, reauthLimiter } = require('./middleware');
 
 const router = express.Router();
 
 const SALT_ROUNDS = 10;
 
 // POST /api/auth/register
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
     try {
         const { username, password } = req.body;
 
@@ -48,7 +48,7 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
     try {
         const { username, password } = req.body;
 
@@ -106,7 +106,7 @@ router.get('/me', (req, res) => {
 
 // PUT /api/auth/username — change the logged-in user's username.
 // Requires current password re-confirmation.
-router.put('/username', requireAuth, async (req, res) => {
+router.put('/username', requireAuth, reauthLimiter, async (req, res) => {
     try {
         const { currentPassword, newUsername } = req.body;
 
@@ -152,7 +152,7 @@ router.put('/username', requireAuth, async (req, res) => {
 
 // PUT /api/auth/password — change the logged-in user's password.
 // Requires current password re-confirmation. Rotates the session ID on success.
-router.put('/password', requireAuth, async (req, res) => {
+router.put('/password', requireAuth, reauthLimiter, async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
 

@@ -281,7 +281,7 @@ Until then, the model stays flat.
 
 - **Compromised session cookie** — anyone with the cookie value is the user. Mitigations in place: `httpOnly` (no JS access), `secure` (HTTPS only), `regenerate()` on login (no fixation). Mitigations *not* in place: device binding, IP pinning, or a "log out other sessions" UI.
 - **Account deletion** — not implemented yet. Username and password change are in place via `PUT /api/auth/username` / `PUT /api/auth/password` (both require current-password re-confirmation; password change rotates the session ID).
-- **Rate limiting on `/api/auth/login`** — none. Brute-force on usernames is currently possible.
+- **Distributed brute-force** — rate limits (see [server/middleware.js](server/middleware.js)) are per IP for login (10 wrong-password attempts / 15 min) and register (10 / 15 min), and per user for the re-auth routes `PUT /auth/username` and `PUT /auth/password` (5 wrong current-password attempts / 15 min). An attacker spread across many IPs can still guess one account's password slowly; there is no per-username lockout (deliberately — it would let anyone lock a victim out). Counters are in memory and reset on restart.
 
 ---
 
@@ -452,6 +452,5 @@ All five tables are now fully integrated into the application:
 What remains genuinely future (see the sections above for detail):
 
 - **Account deletion** — not implemented; only username/password change exist.
-- **Rate limiting on `/api/auth/login`** — none yet; brute-force is currently possible.
 - **Admin roles / system-wide views** — deliberately deferred (see "Decision: no roles, no admin"). Would add a `users.role` column plus `requireAdmin` middleware.
 - **"Manage active sessions" UI** — would require storing IP / user-agent / `last_seen_at`, intentionally not stored today.
