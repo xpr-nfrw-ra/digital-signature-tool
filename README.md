@@ -216,6 +216,7 @@ Look for `Verify return code: 0 (ok)` to confirm the chain validates correctly.
 ## Security Notes
 
 - Private keys are generated and used entirely in the browser; they are never sent to the server.
+- A strict Content Security Policy (helmet, in `server/app.js`) allows scripts, styles and fonts only from the app's own origin — no inline scripts, event-handler attributes or `style=""` attributes, no framing — so injected markup can't run code next to your private keys. Keep new UI code free of inline scripts/styles; `test/security-headers.test.js` checks both the header and the page.
 - Passwords are hashed with bcrypt before storage.
 - Password-checking endpoints are rate limited: login and register per IP, username/password change per user (only wrong-password attempts count). Limited requests get `429` with a `Retry-After` header.
 - Sessions are persisted in SQLite via a Prisma-backed `express-session` store and survive server restarts. Cookies are HTTP-only and secure (HTTPS-only).

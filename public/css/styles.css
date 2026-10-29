@@ -49,6 +49,14 @@ body {
     margin-bottom: 20px;
 }
 
+/* Hidden until JavaScript shows them. Set here rather than in style="" attributes,
+   which the Content Security Policy (style-src 'self') does not allow. */
+#confirmPasswordGroup,
+#loginError,
+#historyMore {
+    display: none;
+}
+
 .login-input-group label {
     display: block;
     margin-bottom: 8px;
