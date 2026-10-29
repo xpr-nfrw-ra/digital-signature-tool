@@ -11,7 +11,11 @@ const LIMITS = {
         pattern: /^[a-zA-Z0-9_.-]+$/,
         patternMsg: 'may only contain letters, digits, dot, underscore, and hyphen',
     },
-    password: { min: 6, max: 128 },
+    // New passwords (register, change password).
+    password: { min: 8, max: 128 },
+    // Passwords being checked against a stored hash (login, re-confirmation). No minimum:
+    // accounts created when the minimum was 6 must still be able to log in.
+    currentPassword: { min: 1, max: 128 },
     label: {
         min: 1, max: 64,
         noControlChars: true,
@@ -43,7 +47,8 @@ function checkString(name, value, limits) {
     if (typeof value !== 'string') {
         return `${name} must be a string`;
     }
-    const v = name === 'password' ? value : value.trim();
+    // Passwords are checked as typed; surrounding spaces are part of the password.
+    const v = (name === 'password' || name === 'currentPassword') ? value : value.trim();
 
     if (limits.exactLength != null && v.length !== limits.exactLength) {
         return `${name} must be exactly ${limits.exactLength} characters`;

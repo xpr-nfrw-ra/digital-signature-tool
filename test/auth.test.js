@@ -172,6 +172,43 @@ describe('change password', () => {
     });
 });
 
+describe('password minimum length', () => {
+    it('new accounts need at least 8 characters', async () => {
+        const c = client();
+        assert.equal((await c.post('/api/auth/register', { username: uniqueUsername('short'), password: '1234567' })).status, 400);
+        assert.equal((await c.post('/api/auth/register', { username: uniqueUsername('ok'), password: '12345678' })).status, 200);
+    });
+
+    it('an existing account with a 6-character password can still log in and manage itself', async () => {
+        // Accounts created when the minimum was 6 have short passwords; insert one directly.
+        const bcrypt = require('bcryptjs');
+        const username = uniqueUsername('legacy');
+        await prisma.user.create({ data: { username, passwordHash: await bcrypt.hash('123456', 10) } });
+
+        const c = client();
+        assert.equal((await c.post('/api/auth/login', { username, password: '123456' })).status, 200);
+
+        const renamed = uniqueUsername('legacy2');
+        assert.equal((await c.put('/api/auth/username', { currentPassword: '123456', newUsername: renamed })).status, 200);
+
+        // Moving to a new password enforces the new minimum...
+        assert.equal((await c.put('/api/auth/password', { currentPassword: '123456', newPassword: '1234567' })).status, 400);
+        assert.equal((await c.put('/api/auth/password', { currentPassword: '123456', newPassword: 'Longer-pass-1' })).status, 200);
+        // ...and the old short password stops working.
+        assert.equal((await client().post('/api/auth/login', { username: renamed, password: '123456' })).status, 401);
+        assert.equal((await client().post('/api/auth/login', { username: renamed, password: 'Longer-pass-1' })).status, 200);
+    });
+
+    it('a short-password account can delete itself', async () => {
+        const bcrypt = require('bcryptjs');
+        const username = uniqueUsername('legacydel');
+        await prisma.user.create({ data: { username, passwordHash: await bcrypt.hash('abcdef', 10) } });
+        const c = client();
+        await c.post('/api/auth/login', { username, password: 'abcdef' });
+        assert.equal((await c.delete('/api/auth/account', { currentPassword: 'abcdef' })).status, 200);
+    });
+});
+
 describe('rate limiting', () => {
     it('blocks login from an IP after 10 wrong passwords, even with the right one', async () => {
         const { username } = await registeredClient('rl');
