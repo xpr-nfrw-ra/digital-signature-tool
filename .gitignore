@@ -23,3 +23,6 @@ test/.tmp/
 
 # Playwright MCP output (screenshots, downloads)
 .playwright-mcp/
+
+# Editor settings
+.vscode/

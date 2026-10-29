@@ -151,10 +151,6 @@ window.applyDefaultSettings = function() {
 const myKeysList = document.getElementById('myKeysList');
 const myKeysStatus = document.getElementById('myKeysStatus');
 
-function shortFp(fp) {
-    return fp.length > 16 ? `${fp.slice(0, 8)}…${fp.slice(-8)}` : fp;
-}
-
 function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
