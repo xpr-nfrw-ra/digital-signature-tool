@@ -4,6 +4,7 @@ const express = require('express');
 const { prisma } = require('./userStore');
 const { requireAuth } = require('./middleware');
 const { validate } = require('./validators');
+const { publicOwner } = require('./userStore');
 
 const router = express.Router();
 
@@ -102,13 +103,13 @@ router.get('/by-hash/:hash', requireAuth, async (req, res) => {
 
         const { rows, nextCursor } = await findPage({ documentHash: documentHash.trim().toLowerCase() }, page, {
             id: true, signedAt: true,
-            user: { select: { username: true } },
+            user: { select: { username: true, deletedAt: true } },
             publicKey: { select: { fingerprint: true } },
         });
         const entries = rows.map(r => ({
             id: r.id,
             signedAt: r.signedAt,
-            username: r.user.username,
+            ...publicOwner(r.user),
             publicKeyFingerprint: r.publicKey.fingerprint,
         }));
         res.json({ entries, nextCursor });

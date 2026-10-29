@@ -2,7 +2,7 @@
 // Private keys never reach the server — this only handles the public half.
 const express = require('express');
 const crypto = require('crypto');
-const { prisma } = require('./userStore');
+const { prisma, publicOwner } = require('./userStore');
 const { requireAuth } = require('./middleware');
 const { validate, LIMITS } = require('./validators');
 
@@ -93,11 +93,12 @@ router.get('/by-fingerprint/:fingerprint', requireAuth, async (req, res) => {
             where: { fingerprint },
             select: {
                 id: true, fingerprint: true, label: true, createdAt: true, publicKeyPem: true,
-                user: { select: { username: true } },
+                user: { select: { username: true, deletedAt: true } },
             },
         });
         if (!key) return res.status(404).json({ error: 'No key with that fingerprint' });
-        res.json({ key });
+        // Keys of deleted accounts stay findable so their past signatures can be verified.
+        res.json({ key: { ...key, user: publicOwner(key.user) } });
     } catch (err) {
         console.error('Key by-fingerprint error:', err);
         res.status(500).json({ error: 'Lookup failed' });

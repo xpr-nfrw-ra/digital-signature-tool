@@ -26,8 +26,16 @@ async function createUser(username, hashedPassword) {
     });
 }
 
+// How a user appears in other people's lookups. A deleted account's internal
+// placeholder name (deleted:<id>) is never shown — just the fact that it was deleted.
+function publicOwner(user) {
+    return user.deletedAt
+        ? { username: null, accountDeleted: true }
+        : { username: user.username, accountDeleted: false };
+}
+
 async function initialize() {
     await prisma.$connect();
 }
 
-module.exports = { findUserByUsername, createUser, initialize, prisma };
+module.exports = { findUserByUsername, createUser, publicOwner, initialize, prisma };

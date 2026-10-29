@@ -283,6 +283,20 @@
                             <div class="account-message" id="passwordMessage"></div>
                             <button class="modal-button primary" id="changePasswordButton">Update Password</button>
                         </div>
+
+                        <div class="settings-section">
+                            <h3>Delete Account</h3>
+                            <p class="settings-note">Your username is freed and you are logged out everywhere. Your registered public keys and signing history are kept, so signatures you made can still be verified; they will show as belonging to a deleted account. This cannot be undone.</p>
+                            <div class="settings-group">
+                                <label>Current Password</label>
+                                <div class="password-wrapper">
+                                    <input type="password" id="deleteAccountPassword" placeholder="Confirm with your current password">
+                                    <button type="button" class="password-toggle" data-target="deleteAccountPassword" aria-label="Toggle password visibility">👁</button>
+                                </div>
+                            </div>
+                            <div class="account-message" id="deleteAccountMessage"></div>
+                            <button class="modal-button danger" id="deleteAccountButton">Delete Account</button>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -703,6 +703,17 @@ body {
     color: #4a4a4a;
 }
 
+.modal-button.danger {
+    background: #c62828;
+    color: white;
+}
+
+.settings-note {
+    font-size: 0.9em;
+    color: #666;
+    margin: 0 0 12px;
+}
+
 .modal-button.secondary:hover {
     background: #d0d0d0;
 }
