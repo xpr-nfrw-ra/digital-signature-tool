@@ -12,8 +12,18 @@ const { PrismaSessionStore } = require('./sessionStore');
 
 const app = express();
 
-// Security headers (disable CSP to allow inline styles/scripts in the client app)
-app.use(helmet({ contentSecurityPolicy: false }));
+// Security headers, including a strict Content Security Policy: scripts, styles and
+// fonts only from this origin, no inline scripts or style attributes, no framing.
+// Private keys live in the browser, so injected script must never be able to run.
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            'style-src': ["'self'"],
+            'font-src': ["'self'"],
+            'frame-ancestors': ["'none'"],
+        },
+    },
+}));
 
 // Parse JSON request bodies
 app.use(express.json());
