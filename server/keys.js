@@ -66,13 +66,14 @@ router.get('/mine', requireAuth, async (req, res) => {
 });
 
 // Exact-username lookup. Returns the user's public keys; empty list if no such user
-// (we don't 404 here, to avoid leaking which usernames exist).
+// (we don't 404 here, to avoid leaking which usernames exist). Deleted accounts look
+// the same as unknown ones; their keys stay reachable by fingerprint for verification.
 router.get('/by-username/:username', requireAuth, async (req, res) => {
     try {
         const username = String(req.params.username || '').trim();
         if (!username) return res.json({ keys: [] });
         const user = await prisma.user.findUnique({ where: { username } });
-        if (!user) return res.json({ keys: [] });
+        if (!user || user.deletedAt) return res.json({ keys: [] });
         const keys = await prisma.publicKey.findMany({
             where: { userId: user.id },
             orderBy: { createdAt: 'desc' },
