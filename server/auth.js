@@ -55,7 +55,7 @@ router.post('/login', loginLimiter, async (req, res) => {
         if (!username || !password) {
             return res.status(400).json({ error: 'Username and password are required' });
         }
-        const err = validate({ username, password });
+        const err = validate({ username, currentPassword: password });
         if (err) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -113,7 +113,7 @@ router.put('/username', requireAuth, reauthLimiter, async (req, res) => {
         if (!currentPassword || !newUsername) {
             return res.status(400).json({ error: 'Current password and new username are required' });
         }
-        const validationErr = validate({ username: newUsername, password: currentPassword });
+        const validationErr = validate({ username: newUsername, currentPassword });
         if (validationErr) {
             return res.status(400).json({ error: validationErr });
         }
@@ -159,7 +159,7 @@ router.put('/password', requireAuth, reauthLimiter, async (req, res) => {
         if (!currentPassword || !newPassword) {
             return res.status(400).json({ error: 'Current password and new password are required' });
         }
-        const validationErr = validate({ password: newPassword });
+        const validationErr = validate({ currentPassword, password: newPassword });
         if (validationErr) {
             return res.status(400).json({ error: validationErr });
         }
@@ -209,7 +209,7 @@ router.delete('/account', requireAuth, reauthLimiter, async (req, res) => {
         if (!currentPassword) {
             return res.status(400).json({ error: 'Current password is required' });
         }
-        const validationErr = validate({ password: currentPassword });
+        const validationErr = validate({ currentPassword });
         if (validationErr) {
             return res.status(400).json({ error: validationErr });
         }

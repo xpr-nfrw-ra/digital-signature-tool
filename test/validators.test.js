@@ -7,7 +7,8 @@ describe('validate', () => {
     it('accepts valid values', () => {
         assert.equal(validate({
             username: 'alice.b_c-1',
-            password: 'secret1',
+            password: 'secret12',
+            currentPassword: 'x',
             label: 'Work key',
             documentName: 'report final.pdf',
             documentHash: 'A'.repeat(64),
@@ -33,8 +34,17 @@ describe('validate', () => {
     });
 
     it('does not trim passwords (surrounding spaces count toward the length)', () => {
-        assert.equal(validate({ password: '  ab  ' }), null);
-        assert.ok(validate({ password: 'ab' }));
+        assert.equal(validate({ password: '  abcd  ' }), null);
+        assert.ok(validate({ password: 'abcd' }));
+        assert.equal(validate({ currentPassword: ' ' }), null, 'a single space is a non-empty password');
+    });
+
+    it('requires at least 8 characters for new passwords, but any length for current ones', () => {
+        assert.match(validate({ password: '1234567' }), /at least 8/);
+        assert.equal(validate({ password: '12345678' }), null);
+        assert.equal(validate({ currentPassword: '123456' }), null);
+        assert.ok(validate({ currentPassword: '' }));
+        assert.ok(validate({ currentPassword: 'x'.repeat(129) }));
     });
 
     it('enforces document hash lengths for SHA-256/384/512 hex', () => {
