@@ -13,14 +13,14 @@ What's left, what still needs deciding, and why things are the way they are. [RE
 - [x] Fresh-clone setup works (`setup.bat` creates `.env`, migrates, generates certs)
 - [x] `SESSION_SECRET` and `DATABASE_URL` from `.env`
 - [x] Rate limiting on login, register and password re-confirmation
+- [x] Automated tests (`npm test`): 56 tests across auth, sessions, rate limits, access control, keys, settings, signature log, validators and on-delete rules
 
 ### Next, in order
-1. [ ] **Automated tests.** Split the Express app from the HTTPS listener (`server/app.js`), add Vitest + Supertest with a separate `DATABASE_URL` test database, and cover auth, session behaviour, rate limits, `requireAuth`, ownership checks, validators, key lookup and the signature log. Then a hook that runs `npm test` after server edits.
-2. [ ] **Signing history pagination** — cursor-based `GET /signatures/mine?limit=&cursor=`. The frontend doesn't show history yet, so a history view is an optional follow-up.
-3. [ ] **Audit log lookup by document hash**, with an index on `signature_log.document_hash`. *Needs decision D1.*
-4. [ ] **Account deletion** with current-password re-confirmation. *Needs decision D2.*
-5. [ ] **ECDSA**: today the browser generates RSA keys when ECDSA is selected (`public/js/crypto.js`). *Needs decision D3.* The backend change is only `ALLOWED_SIG` in `server/settings.js`.
-6. [ ] **Production deployment** — once there is a target server. See the plan below.
+1. [ ] **Signing history pagination** — cursor-based `GET /signatures/mine?limit=&cursor=`. The frontend doesn't show history yet, so a history view is an optional follow-up.
+2. [ ] **Audit log lookup by document hash**, with an index on `signature_log.document_hash`. *Needs decision D1.*
+3. [ ] **Account deletion** with current-password re-confirmation. *Needs decision D2.*
+4. [ ] **ECDSA**: today the browser generates RSA keys when ECDSA is selected (`public/js/crypto.js`). *Needs decision D3.* The backend change is only `ALLOWED_SIG` in `server/settings.js`.
+5. [ ] **Production deployment** — once there is a target server. See the plan below.
 
 ### Smaller items
 - [ ] Minimum password length is 6 (`server/validators.js`); consider raising it to 8–12.

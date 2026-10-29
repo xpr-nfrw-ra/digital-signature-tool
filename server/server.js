@@ -1,4 +1,4 @@
-// server.js - Express HTTPS server (OpenSSL CA chain)
+// server.js - Entry point: loads config, then serves the Express app over HTTPS (OpenSSL CA chain)
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
@@ -9,48 +9,11 @@ if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const express = require('express');
-const session = require('express-session');
-const helmet = require('helmet');
-const authRoutes = require('./auth');
-const settingsRoutes = require('./settings').router;
-const keysRoutes = require('./keys').router;
-const signaturesRoutes = require('./signatures').router;
+const { app } = require('./app');
 const userStore = require('./userStore');
-const { PrismaSessionStore, cleanupExpiredSessions } = require('./sessionStore');
+const { cleanupExpiredSessions } = require('./sessionStore');
 
-const app = express();
 const PORT = 3443;
-
-// Security headers (disable CSP to allow inline styles/scripts in the client app)
-app.use(helmet({ contentSecurityPolicy: false }));
-
-// Parse JSON request bodies
-app.use(express.json());
-
-// Session configuration — sessions persisted in SQLite via Prisma so they survive restarts.
-// 2-hour sliding idle timeout: any authenticated request refreshes `expires_at`.
-const SESSION_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
-app.use(session({
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    store: new PrismaSessionStore({ defaultMaxAgeMs: SESSION_MAX_AGE_MS }),
-    cookie: {
-        secure: true,
-        httpOnly: true,
-        maxAge: SESSION_MAX_AGE_MS
-    }
-}));
-
-// Auth API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/keys', keysRoutes);
-app.use('/api/signatures', signaturesRoutes);
-
-// Serve static client files
-app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Start server
 async function start() {
