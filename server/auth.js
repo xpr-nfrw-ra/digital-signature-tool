@@ -61,7 +61,7 @@ router.post('/login', loginLimiter, async (req, res) => {
         }
 
         const user = await userStore.findUserByUsername(username.trim());
-        if (!user) {
+        if (!user || user.deletedAt) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
@@ -195,6 +195,58 @@ router.put('/password', requireAuth, reauthLimiter, async (req, res) => {
     } catch (err) {
         console.error('Password change error:', err);
         res.status(500).json({ error: 'Password change failed' });
+    }
+});
+
+// DELETE /api/auth/account — soft-delete the logged-in user's account.
+// Requires current password re-confirmation. Public keys and signing history are kept
+// (signature_log is the audit trail and must outlive the account); the username is
+// freed, the password hash scrubbed, and settings and every session removed.
+router.delete('/account', requireAuth, reauthLimiter, async (req, res) => {
+    try {
+        const { currentPassword } = req.body || {};
+
+        if (!currentPassword) {
+            return res.status(400).json({ error: 'Current password is required' });
+        }
+        const validationErr = validate({ password: currentPassword });
+        if (validationErr) {
+            return res.status(400).json({ error: validationErr });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: req.session.user.id } });
+        if (!user || user.deletedAt) {
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
+
+        const match = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!match) {
+            return res.status(401).json({ error: 'Current password is incorrect' });
+        }
+
+        await prisma.$transaction([
+            prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    // ':' is not allowed in usernames, so this can never collide with
+                    // a real account, and the original name becomes free to register.
+                    username: `deleted:${user.id}`,
+                    // Not a bcrypt hash, so no password can ever match it.
+                    passwordHash: '!deleted',
+                    deletedAt: new Date(),
+                },
+            }),
+            prisma.userSettings.deleteMany({ where: { userId: user.id } }),
+            prisma.session.deleteMany({ where: { userId: user.id } }),
+        ]);
+
+        req.session.destroy(() => {
+            res.clearCookie('connect.sid');
+            res.json({ success: true });
+        });
+    } catch (err) {
+        console.error('Account deletion error:', err);
+        res.status(500).json({ error: 'Account deletion failed' });
     }
 });
 

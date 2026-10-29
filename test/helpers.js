@@ -60,7 +60,7 @@ function client({ ip = uniqueIp() } = {}) {
         get: url => send('get', url),
         post: (url, body) => send('post', url, body),
         put: (url, body) => send('put', url, body),
-        delete: url => send('delete', url),
+        delete: (url, body) => send('delete', url, body),
         get cookie() { return cookie; },
         set cookie(value) { cookie = value; },
     };

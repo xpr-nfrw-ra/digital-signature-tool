@@ -151,6 +151,7 @@ All endpoints under `/api`. Sessions are cookie-based; `requireAuth` guards ever
 |---|---|
 | `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` | Account lifecycle |
 | `PUT /auth/username`, `PUT /auth/password` | Change username / password from the Settings → Account card (both require current-password re-confirmation) |
+| `DELETE /auth/account` | Delete your account (body `{ currentPassword }`). Soft delete — see "Deleting an account" below |
 | `GET /settings`, `PUT /settings` | Per-user crypto preferences |
 | `POST /keys`, `GET /keys/mine`, `DELETE /keys/:id` | Manage your own public keys |
 | `GET /keys/by-username/:u`, `GET /keys/by-fingerprint/:fp` | Targeted lookup for verification |
@@ -164,7 +165,7 @@ SQLite via Prisma ORM. [prisma/schema.prisma](prisma/schema.prisma) is the sourc
 
 | Table | Holds | Notes |
 |---|---|---|
-| `users` | `username` (unique), `password_hash` (bcrypt, 10 rounds), `created_at` | No role column — every user is equal. |
+| `users` | `username` (unique), `password_hash` (bcrypt, 10 rounds), `created_at`, `deleted_at` (null unless deleted) | No role column — every user is equal. |
 | `sessions` | express-session rows: `id` (= `connect.sid`), `user_id`, `session_data` (JSON), `expires_at` (indexed), `created_at` | A row appears only on login/register (`saveUninitialized: false`). 2-hour sliding idle timeout, refreshed on every authenticated request; expired rows are purged at startup and lazily on read. Deleted on logout. No IP/user-agent stored. |
 | `public_keys` | `fingerprint` (unique, SHA-256 of DER SPKI), `public_key_pem`, `label`, `user_id` | A user may have many keys; all are returned by username lookup. |
 | `signature_log` | `user_id` (indexed), `public_key_id`, `document_name`, `document_hash` (indexed), `signed_at` | Evidence of a signing event. The signing itself happens in the browser. |
@@ -181,9 +182,17 @@ SQLite via Prisma ORM. [prisma/schema.prisma](prisma/schema.prisma) is the sourc
 | `signature_log.public_key_id` → `public_keys` | RESTRICT | A key that signed something can't be silently removed. |
 | `public_keys.user_id` → `users` | RESTRICT | Keys may be referenced by the audit log. |
 
+**Deleting an account** is a soft delete, because the RESTRICT rules above (rightly) stop a user row with keys or history from disappearing. In one transaction, `DELETE /api/auth/account`:
+
+- sets `deleted_at`, renames the user to `deleted:<id>` (`:` is not a legal username character, so it can't collide, and the original name is free to register again) and replaces the password hash with a value no password can match;
+- deletes the user's settings and **every** session, so other devices are logged out too;
+- keeps `public_keys` and `signature_log` rows, so past signatures remain verifiable.
+
+In public lookups (`/keys/by-fingerprint`, `/signatures/by-hash`) a deleted owner appears as `username: null, accountDeleted: true` — the placeholder name is never shown, and a new user who takes the old name inherits nothing. A deleted user's key can't be registered by anyone else.
+
 **Field rules.** SQLite enforces only types, `NOT NULL`, `UNIQUE` and foreign keys — it ignores `VARCHAR(n)` and has no regex. Length and format rules (username 3–32 chars of `[a-zA-Z0-9_.-]`, document hash exactly 64/96/128 hex chars, fingerprint 64 hex, PEM shape, label 1–64 chars, …) live in the `LIMITS` object in [server/validators.js](server/validators.js), which every write route calls before touching the database.
 
-**Changing the schema.** Edit `prisma/schema.prisma`, run `npx prisma migrate dev --name <description>`, and commit the generated folder under `prisma/migrations/`. Inspect data with `npx prisma studio` or `sqlite3 dev.db`. Application code must go through Prisma (or the parameterized `prisma.$queryRaw`), never hand-built SQL.
+**Changing the schema.** Edit `prisma/schema.prisma`, run `npx prisma migrate dev --name <description>`, then `npx prisma generate` (Prisma 7 no longer regenerates the client during `migrate dev`; `npm test` does it for you), and commit the generated folder under `prisma/migrations/`. Inspect data with `npx prisma studio` or `sqlite3 dev.db`. Application code must go through Prisma (or the parameterized `prisma.$queryRaw`), never hand-built SQL.
 
 ## Access control
 
@@ -216,5 +225,4 @@ Look for `Verify return code: 0 (ok)` to confirm the chain validates correctly.
 
 - Anyone holding a session cookie is that user — there is no device binding or "log out other sessions".
 - Rate-limit counters are in memory and per IP; an attacker spread over many IPs can still guess one account's password slowly.
-- Account deletion is not implemented.
 - Choosing ECDSA in settings currently produces RSA keys.

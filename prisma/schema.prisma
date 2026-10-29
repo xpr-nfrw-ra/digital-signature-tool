@@ -11,6 +11,9 @@ model User {
   username     String         @unique
   passwordHash String         @map("password_hash")
   createdAt    DateTime       @default(now()) @map("created_at")
+  // Set when the account is deleted (soft delete): the row stays so the user's keys
+  // and signing history remain verifiable; credentials and username are scrubbed.
+  deletedAt    DateTime?      @map("deleted_at")
 
   sessions     Session[]
   signatureLogs SignatureLog[]

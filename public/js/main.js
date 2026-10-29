@@ -227,12 +227,13 @@ window.resetAccountForms = function() {
     const ids = [
         'usernameCurrentPassword', 'newUsername',
         'passwordCurrentPassword', 'newPassword', 'confirmNewPassword',
+        'deleteAccountPassword',
     ];
     for (const id of ids) {
         const el = document.getElementById(id);
         if (el) el.value = '';
     }
-    for (const id of ['usernameMessage', 'passwordMessage']) {
+    for (const id of ['usernameMessage', 'passwordMessage', 'deleteAccountMessage']) {
         const el = document.getElementById(id);
         if (el) {
             el.textContent = '';
@@ -328,5 +329,41 @@ changePasswordButton.addEventListener('click', async () => {
         setAccountMessage('passwordMessage', 'Connection error.', true);
     } finally {
         changePasswordButton.disabled = false;
+    }
+});
+
+const deleteAccountButton = document.getElementById('deleteAccountButton');
+
+deleteAccountButton.addEventListener('click', async () => {
+    const currentPassword = document.getElementById('deleteAccountPassword').value;
+
+    if (!currentPassword) {
+        setAccountMessage('deleteAccountMessage', 'Enter your current password to confirm.', true);
+        return;
+    }
+    if (!confirm('Delete your account? This cannot be undone. Your public keys and signing history will be kept for verification.')) {
+        return;
+    }
+
+    deleteAccountButton.disabled = true;
+    setAccountMessage('deleteAccountMessage', '', false);
+    try {
+        const res = await fetch('/api/auth/account', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentPassword }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+            alert('Your account has been deleted.');
+            // Reuse the logout flow to clear per-user state and return to the login page.
+            document.getElementById('logoutButton').click();
+        } else {
+            setAccountMessage('deleteAccountMessage', data.error || 'Deletion failed.', true);
+        }
+    } catch (e) {
+        setAccountMessage('deleteAccountMessage', 'Connection error.', true);
+    } finally {
+        deleteAccountButton.disabled = false;
     }
 });
