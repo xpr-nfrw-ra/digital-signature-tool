@@ -188,7 +188,7 @@ SQLite via Prisma ORM. [prisma/schema.prisma](prisma/schema.prisma) is the sourc
 - deletes the user's settings and **every** session, so other devices are logged out too;
 - keeps `public_keys` and `signature_log` rows, so past signatures remain verifiable.
 
-In public lookups (`/keys/by-fingerprint`, `/signatures/by-hash`) a deleted owner appears as `username: null, accountDeleted: true` — the placeholder name is never shown, and a new user who takes the old name inherits nothing. A deleted user's key can't be registered by anyone else.
+In public lookups (`/keys/by-fingerprint`, `/signatures/by-hash`) a deleted owner appears as `username: null, accountDeleted: true` — the placeholder name is never shown, and a new user who takes the old name inherits nothing. `/keys/by-username` treats a deleted account like an unknown username (empty list), including when queried by its placeholder name. A deleted user's key can't be registered by anyone else.
 
 **Field rules.** SQLite enforces only types, `NOT NULL`, `UNIQUE` and foreign keys — it ignores `VARCHAR(n)` and has no regex. Length and format rules (username 3–32 chars of `[a-zA-Z0-9_.-]`, document hash exactly 64/96/128 hex chars, fingerprint 64 hex, PEM shape, label 1–64 chars, …) live in the `LIMITS` object in [server/validators.js](server/validators.js), which every write route calls before touching the database.
 

@@ -96,6 +96,16 @@ describe('delete account', () => {
         assert.ok(!JSON.stringify(byHash.body).includes('deleted:'), 'placeholder name must not leak');
     });
 
+    it('the placeholder name is not a working username lookup', async () => {
+        const u = await userWithHistory('del');
+        await sendDelete(u.client, PASSWORD);
+        const { client: verifier } = await registeredClient('verifier');
+
+        const res = await verifier.get(`/api/keys/by-username/deleted:${u.userId}`);
+        assert.equal(res.status, 200);
+        assert.deepEqual(res.body, { keys: [] }, 'must look exactly like an unknown username');
+    });
+
     it('a deleted user\'s key cannot be claimed by someone else', async () => {
         const u = await userWithHistory('del');
         await sendDelete(u.client, PASSWORD);
