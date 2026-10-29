@@ -121,17 +121,18 @@ digital-signature-tool/
 │   ├── signatures.js        # /api/signatures/*  (audit log)
 │   ├── userStore.js         # Prisma/SQLite user storage + shared client export
 │   ├── sessionStore.js      # Custom express-session Store backed by Prisma
-│   ├── middleware.js        # requireAuth
+│   ├── middleware.js        # requireAuth + rate limiters
 │   └── validators.js        # Centralized input/length validation
-├── dev.db                   # SQLite database — gitignored (created on first run)
+├── dev.db                   # SQLite database — gitignored (created by migrate deploy)
 ├── certs/                   # Generated certificates — gitignored
-├── database-planning.md     # Schema + querying reference
+├── .env.example             # Template for .env (DATABASE_URL, SESSION_SECRET)
+├── ROADMAP.md               # Remaining work, open decisions, decision log
 └── package.json
 ```
 
 ## API at a glance
 
-All endpoints under `/api`. Sessions are cookie-based; `requireAuth` guards everything except `auth/login`, `auth/register`, and the public `auth/me` check.
+All endpoints under `/api`. Sessions are cookie-based; `requireAuth` guards everything except `auth/login`, `auth/register`, `auth/logout`, and the public `auth/me` check.
 
 | Route | Purpose |
 |---|---|
@@ -142,7 +143,40 @@ All endpoints under `/api`. Sessions are cookie-based; `requireAuth` guards ever
 | `GET /keys/by-username/:u`, `GET /keys/by-fingerprint/:fp` | Targeted lookup for verification |
 | `POST /signatures`, `GET /signatures/mine` | Append / read signing audit log |
 
-See [database-planning.md](database-planning.md) for the data model and Prisma query examples.
+## Database
+
+SQLite via Prisma ORM. [prisma/schema.prisma](prisma/schema.prisma) is the source of truth; every router uses the shared Prisma client exported from `server/userStore.js`. Five tables, all hanging off `users`:
+
+| Table | Holds | Notes |
+|---|---|---|
+| `users` | `username` (unique), `password_hash` (bcrypt, 10 rounds), `created_at` | No role column — every user is equal. |
+| `sessions` | express-session rows: `id` (= `connect.sid`), `user_id`, `session_data` (JSON), `expires_at` (indexed), `created_at` | A row appears only on login/register (`saveUninitialized: false`). 2-hour sliding idle timeout, refreshed on every authenticated request; expired rows are purged at startup and lazily on read. Deleted on logout. No IP/user-agent stored. |
+| `public_keys` | `fingerprint` (unique, SHA-256 of DER SPKI), `public_key_pem`, `label`, `user_id` | A user may have many keys; all are returned by username lookup. |
+| `signature_log` | `user_id`, `public_key_id`, `document_name`, `document_hash`, `signed_at` | Evidence of a signing event. The signing itself happens in the browser. |
+| `user_settings` | `hash_algorithm`, `signature_algorithm`, `key_size`, `default_public_key_id` | 1-to-1 with `users`; defaults inserted on registration. The default key is only a bookmark — it doesn't restrict lookups. |
+
+**What happens on delete** (declared in the schema, enforced by SQLite):
+
+| Foreign key | On parent delete | Why |
+|---|---|---|
+| `sessions.user_id` → `users` | CASCADE | Orphaned sessions are a security smell. |
+| `user_settings.user_id` → `users` | CASCADE | Settings are meaningless without the user. |
+| `user_settings.default_public_key_id` → `public_keys` | SET NULL | Just a bookmark. |
+| `signature_log.user_id` → `users` | RESTRICT | The audit trail must outlive an account. |
+| `signature_log.public_key_id` → `public_keys` | RESTRICT | A key that signed something can't be silently removed. |
+| `public_keys.user_id` → `users` | RESTRICT | Keys may be referenced by the audit log. |
+
+**Field rules.** SQLite enforces only types, `NOT NULL`, `UNIQUE` and foreign keys — it ignores `VARCHAR(n)` and has no regex. Length and format rules (username 3–32 chars of `[a-zA-Z0-9_.-]`, document hash exactly 64/96/128 hex chars, fingerprint 64 hex, PEM shape, label 1–64 chars, …) live in the `LIMITS` object in [server/validators.js](server/validators.js), which every write route calls before touching the database.
+
+**Changing the schema.** Edit `prisma/schema.prisma`, run `npx prisma migrate dev --name <description>`, and commit the generated folder under `prisma/migrations/`. Inspect data with `npx prisma studio` or `sqlite3 dev.db`. Application code must go through Prisma (or the parameterized `prisma.$queryRaw`), never hand-built SQL.
+
+## Access control
+
+- **Authentication:** username + password → `bcrypt.compare` → `req.session.regenerate()` (new session ID, prevents fixation) → `req.session.user = { id, username }`. Password change also rotates the session ID.
+- **Gate:** `requireAuth` in [server/middleware.js](server/middleware.js) returns 401 for every route except register, login, logout and `me` (which returns its own 401 when there's no session).
+- **Ownership:** handlers that touch a row check `row.userId === req.session.user.id` (deleting a key, logging a signature with a key, setting the default key); "mine" routes query by the session user's id.
+- **Public lookups:** `/keys/by-username/:u` and `/keys/by-fingerprint/:fp` deliberately return other users' public keys (they're not secret; verification needs them). Exact match only — there is no list-all endpoint.
+- **Admin access** to the data is out-of-band: whoever can open `dev.db` (sqlite3 / Prisma Studio) has full access.
 
 ## Verifying TLS from the command line
 
@@ -162,3 +196,10 @@ Look for `Verify return code: 0 (ok)` to confirm the chain validates correctly.
 - Public-key lookup is targeted: callers must supply an exact username or full fingerprint. There is no browse/list-all endpoint, which limits passive enumeration.
 - Input length caps for usernames, labels, hashes, etc. are enforced at the API boundary in `server/validators.js` (SQLite does not enforce VARCHAR length itself).
 - The generated Root CA is for local development only — do not use it in production.
+
+**Known gaps** (tracked in [ROADMAP.md](ROADMAP.md)):
+
+- Anyone holding a session cookie is that user — there is no device binding or "log out other sessions".
+- Rate-limit counters are in memory and per IP; an attacker spread over many IPs can still guess one account's password slowly.
+- Account deletion is not implemented.
+- Choosing ECDSA in settings currently produces RSA keys.
