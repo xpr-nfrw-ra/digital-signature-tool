@@ -73,11 +73,102 @@ async function onSignatureFilePicked() {
 
 signatureFileInput.addEventListener('change', onSignatureFilePicked);
 
+// ===== Who signed this file? =====
+// Looks the picked file up in the signing audit log. The log stores each document's
+// hash in whichever algorithm the signer used, so all three are checked.
+const fileToVerifyInput = document.getElementById('fileToVerify');
+const signersBox = document.getElementById('signersBox');
+const signersStatus = document.getElementById('signersStatus');
+const signersList = document.getElementById('signersList');
+const SIGNER_HASHES = ['sha256', 'sha384', 'sha512'];
+const SIGNERS_PER_HASH = 100;
+
+let signerEntries = [];
+let signersTruncated = false;
+let verifiedFingerprint = null; // key of the last VALID verification, to highlight its signer
+let signersRequest = 0;         // results of an older lookup are ignored
+
+function setSignersStatus(text) {
+    signersStatus.textContent = text;
+    signersStatus.style.display = text ? 'block' : 'none';
+}
+
+function renderSigners() {
+    signersList.replaceChildren();
+    for (const e of signerEntries) {
+        const li = document.createElement('li');
+        li.className = 'history-item';
+        const who = document.createElement('span');
+        who.className = 'history-main' + (e.accountDeleted ? ' deleted' : '');
+        who.textContent = e.accountDeleted ? 'Deleted account' : e.username;
+        const meta = document.createElement('span');
+        meta.className = 'history-meta';
+        meta.textContent = [
+            new Date(e.signedAt).toLocaleString(),
+            `key ${shortFp(e.publicKeyFingerprint)}`,
+            WEBCRYPTO_HASH[e.hash],
+        ].join('  ·  ');
+        meta.title = e.publicKeyFingerprint;
+        li.append(who, meta);
+        if (verifiedFingerprint && e.publicKeyFingerprint === verifiedFingerprint) {
+            li.classList.add('matches-key');
+            const badge = document.createElement('span');
+            badge.className = 'history-badge';
+            badge.textContent = '✓ the key you just verified with';
+            li.append(badge);
+        }
+        signersList.appendChild(li);
+    }
+    if (!signerEntries.length) {
+        setSignersStatus('No one has a recorded signature for this exact file. Only signing done while logged in is recorded.');
+    } else {
+        setSignersStatus(signersTruncated ? `Showing the ${SIGNERS_PER_HASH} most recent records per hash algorithm.` : '');
+    }
+}
+
+async function refreshSigners() {
+    const request = ++signersRequest;
+    signerEntries = [];
+    verifiedFingerprint = null;
+    signersList.replaceChildren();
+    const file = fileToVerifyInput.files[0];
+    if (!file || !currentUser) {
+        signersBox.classList.remove('show');
+        return;
+    }
+    signersBox.classList.add('show');
+    setSignersStatus('Checking the signing log…');
+    try {
+        const data = await readFileAsArrayBuffer(file);
+        const pages = await Promise.all(SIGNER_HASHES.map(async hash => {
+            const hex = await digestHex(data, hash);
+            const res = await fetch(`/api/signatures/by-hash/${hex}?limit=${SIGNERS_PER_HASH}`);
+            if (!res.ok) throw new Error('lookup failed');
+            const body = await res.json();
+            return { entries: body.entries.map(e => ({ ...e, hash })), more: body.nextCursor !== null };
+        }));
+        if (request !== signersRequest) return;
+        signerEntries = pages.flatMap(p => p.entries)
+            .sort((a, b) => new Date(b.signedAt) - new Date(a.signedAt));
+        signersTruncated = pages.some(p => p.more);
+        renderSigners();
+    } catch (e) {
+        if (request === signersRequest) setSignersStatus('Could not check the signing log.');
+    }
+}
+
+fileToVerifyInput.addEventListener('change', refreshSigners);
+
 // Clears verification-page inputs and any in-memory state from the previous
 // session. Called on logout so a new user never sees the previous user's
 // selected files, looked-up key, or stale verification result.
 window.resetVerificationForm = function() {
     lookedUpPublicKeyPem = null;
+    signersRequest++;
+    signerEntries = [];
+    verifiedFingerprint = null;
+    signersList.replaceChildren();
+    signersBox.classList.remove('show');
 
     const fileToVerify = document.getElementById('fileToVerify');
     const signatureFile = document.getElementById('signatureFile');
@@ -231,7 +322,11 @@ verifyButton.addEventListener('click', async () => {
             resultStatus.textContent = 'INVALID';
             resultMessage.textContent = 'The signature does not match or the file has been tampered with' + usedDetail;
         }
-        
+
+        // Highlight the logged signer whose key just produced a valid signature.
+        verifiedFingerprint = isValid ? await fingerprintFromPublicKeyPem(publicKeyPem).catch(() => null) : null;
+        if (signersBox.classList.contains('show')) renderSigners();
+
     } catch (error) {
         verifyingProgress.classList.remove('show');
         verificationResult.classList.add('show', 'invalid');

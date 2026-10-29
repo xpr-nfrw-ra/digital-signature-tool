@@ -19,12 +19,12 @@ What's left, what still needs deciding, and why things are the way they are. [RE
 - [x] Account deletion (`DELETE /auth/account`): soft delete with current-password re-confirmation, plus a Delete Account section in Settings
 - [x] Real ECDSA (P-256 / P-384 / P-521) via the Web Crypto API, alongside RSA
 - [x] Minimum length for new passwords raised from 6 to 8; existing shorter passwords still log in
+- [x] Frontend: Signing History card (paged) and "Who signed this file?" on the verify page
 
 ### Next, in order
 1. [ ] **Production deployment** — once there is a target server. See the plan below.
 
 ### Smaller items
-- [ ] Optional: a signing-history view and a "who signed this file?" check in the frontend — both APIs exist, nothing in the UI calls them yet.
 - [ ] Optional: a "log out other sessions" view (would need IP / user-agent / last-seen stored per session, which is deliberately not done today).
 
 ## Open decisions

@@ -164,6 +164,15 @@ describe('fingerprints and the server', () => {
         }
     });
 
+    it('fingerprintFromPublicKeyPem and digestHex match the server and forge', async () => {
+        for (const keys of [rsaKeys, ...Object.values(ecKeys)]) {
+            assert.equal(await bc.fingerprintFromPublicKeyPem(keys.publicKeyPem), fingerprintFromPem(keys.publicKeyPem));
+        }
+        for (const hash of ['sha256', 'sha384', 'sha512']) {
+            assert.equal(await bc.digestHex(FILE, hash), bc.hashFileHex(FILE, hash));
+        }
+    });
+
     it('the server registers ECDSA public keys and logs ECDSA signing events', async () => {
         const { client } = await registeredClient('ec');
         for (const keys of Object.values(ecKeys)) {
