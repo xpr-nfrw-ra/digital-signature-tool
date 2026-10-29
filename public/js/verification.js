@@ -57,7 +57,7 @@ async function onSignatureFilePicked() {
         if (parsed.alg && parsed.hash) {
             verifyHashSelect.value = parsed.hash;
             verifyHashSelect.disabled = true;
-            verifyAlgoNote.textContent = `Auto-detected from signature file: ${parsed.alg.toUpperCase()} with ${parsed.hash.toUpperCase()}.`;
+            verifyAlgoNote.textContent = `Auto-detected from signature file: ${parsed.alg.toUpperCase()} with ${WEBCRYPTO_HASH[parsed.hash] || parsed.hash.toUpperCase()}.`;
             verifyAlgoNote.className = 'verify-algo-note detected';
         } else {
             verifyHashSelect.disabled = false;
@@ -212,7 +212,6 @@ function setLookupMessage(text, cls) {
     lookupResult.textContent = text;
 }
 
-function shortFp(fp) { return fp.slice(0, 16) + '…'; }
 
 function renderKeyChoices(keys) {
     lookedUpPublicKeyPem = null;
@@ -310,7 +309,7 @@ verifyButton.addEventListener('click', async () => {
         verifyingProgress.classList.remove('show');
         verificationResult.classList.add('show');
 
-        const usedDetail = ` (${alg.toUpperCase()} / ${hashAlg.toUpperCase()})`;
+        const usedDetail = ` (${alg.toUpperCase()} / ${WEBCRYPTO_HASH[hashAlg]})`;
         if (isValid) {
             verificationResult.classList.add('valid');
             verificationResult.classList.remove('invalid');

@@ -192,6 +192,11 @@ function bytesToHex(bytes) {
     return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Short display form of a fingerprint: first and last 8 hex characters.
+function shortFp(fp) {
+    return fp.length > 16 ? `${fp.slice(0, 8)}…${fp.slice(-8)}` : fp;
+}
+
 // SHA-256 fingerprint of a forge RSA public key (DER-encoded SubjectPublicKeyInfo), as hex.
 // Matches the server-side fingerprint computed by Node's crypto module.
 function fingerprintFromPublicKey(publicKey) {
