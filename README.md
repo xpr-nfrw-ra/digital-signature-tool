@@ -154,7 +154,9 @@ All endpoints under `/api`. Sessions are cookie-based; `requireAuth` guards ever
 | `GET /settings`, `PUT /settings` | Per-user crypto preferences |
 | `POST /keys`, `GET /keys/mine`, `DELETE /keys/:id` | Manage your own public keys |
 | `GET /keys/by-username/:u`, `GET /keys/by-fingerprint/:fp` | Targeted lookup for verification |
-| `POST /signatures`, `GET /signatures/mine` | Append / read signing audit log |
+| `POST /signatures` | Log a signing event (the key must be yours) |
+| `GET /signatures/mine?limit=&cursor=` | Your signing history, newest first. Returns `{ entries, nextCursor }`; pass `nextCursor` back as `cursor` for the next page (`limit` 1–100, default 50; `nextCursor` is `null` on the last page) |
+| `GET /signatures/by-hash/:hash?limit=&cursor=` | Everyone who signed the document with this SHA-256/384/512 hash: username, key fingerprint, time (no document names). Same paging as above |
 
 ## Database
 
@@ -165,7 +167,7 @@ SQLite via Prisma ORM. [prisma/schema.prisma](prisma/schema.prisma) is the sourc
 | `users` | `username` (unique), `password_hash` (bcrypt, 10 rounds), `created_at` | No role column — every user is equal. |
 | `sessions` | express-session rows: `id` (= `connect.sid`), `user_id`, `session_data` (JSON), `expires_at` (indexed), `created_at` | A row appears only on login/register (`saveUninitialized: false`). 2-hour sliding idle timeout, refreshed on every authenticated request; expired rows are purged at startup and lazily on read. Deleted on logout. No IP/user-agent stored. |
 | `public_keys` | `fingerprint` (unique, SHA-256 of DER SPKI), `public_key_pem`, `label`, `user_id` | A user may have many keys; all are returned by username lookup. |
-| `signature_log` | `user_id`, `public_key_id`, `document_name`, `document_hash`, `signed_at` | Evidence of a signing event. The signing itself happens in the browser. |
+| `signature_log` | `user_id` (indexed), `public_key_id`, `document_name`, `document_hash` (indexed), `signed_at` | Evidence of a signing event. The signing itself happens in the browser. |
 | `user_settings` | `hash_algorithm`, `signature_algorithm`, `key_size`, `default_public_key_id` | 1-to-1 with `users`; defaults inserted on registration. The default key is only a bookmark — it doesn't restrict lookups. |
 
 **What happens on delete** (declared in the schema, enforced by SQLite):
@@ -188,7 +190,7 @@ SQLite via Prisma ORM. [prisma/schema.prisma](prisma/schema.prisma) is the sourc
 - **Authentication:** username + password → `bcrypt.compare` → `req.session.regenerate()` (new session ID, prevents fixation) → `req.session.user = { id, username }`. Password change also rotates the session ID.
 - **Gate:** `requireAuth` in [server/middleware.js](server/middleware.js) returns 401 for every route except register, login, logout and `me` (which returns its own 401 when there's no session).
 - **Ownership:** handlers that touch a row check `row.userId === req.session.user.id` (deleting a key, logging a signature with a key, setting the default key); "mine" routes query by the session user's id.
-- **Public lookups:** `/keys/by-username/:u` and `/keys/by-fingerprint/:fp` deliberately return other users' public keys (they're not secret; verification needs them). Exact match only — there is no list-all endpoint.
+- **Public lookups:** `/keys/by-username/:u` and `/keys/by-fingerprint/:fp` deliberately return other users' public keys (they're not secret; verification needs them), and `/signatures/by-hash/:hash` returns who signed a given document. Exact match only — there is no list-all endpoint, so you must already know the username, fingerprint or file.
 - **Admin access** to the data is out-of-band: whoever can open `dev.db` (sqlite3 / Prisma Studio) has full access.
 
 ## Verifying TLS from the command line

@@ -58,6 +58,8 @@ model SignatureLog {
   user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
   publicKey PublicKey @relation(fields: [publicKeyId], references: [id], onDelete: Restrict)
 
+  @@index([userId])
+  @@index([documentHash])
   @@map("signature_log")
 }
 
