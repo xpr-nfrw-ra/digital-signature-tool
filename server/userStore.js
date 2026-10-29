@@ -5,7 +5,11 @@ const path = require('path');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3');
 
-const dbPath = path.join(__dirname, '..', 'dev.db');
+// DATABASE_URL is shared with the Prisma CLI (prisma.config.ts). A relative path is resolved
+// against the project root so the server finds the same file regardless of the working directory.
+const PROJECT_ROOT = path.join(__dirname, '..');
+const dbUrl = process.env.DATABASE_URL || 'file:./dev.db';
+const dbPath = path.resolve(PROJECT_ROOT, dbUrl.replace(/^file:/, ''));
 const adapter = new PrismaBetterSqlite3({ url: 'file:' + dbPath });
 const prisma = new PrismaClient({ adapter });
 
