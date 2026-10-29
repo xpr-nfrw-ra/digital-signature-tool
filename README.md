@@ -99,6 +99,16 @@ Navigate to **https://localhost:3443**.
 
 After importing the Root CA you should see a closed padlock. Click it → **Connection is secure** → **Certificate is valid** to inspect the full chain.
 
+## Running tests
+
+```bash
+npm test
+```
+
+Uses Node's built-in test runner with [Supertest](https://github.com/ladjs/supertest); no server or certificates needed. `scripts/prepare-test-db.js` builds a freshly migrated template database in `test/.tmp/` (gitignored), and each test file works on its own temporary copy, so your `dev.db` is never touched. Tests cover registration/login/logout, session rotation and expiry, rate limits, the `requireAuth` gate, ownership checks, key lookup, settings, the signature log, validators, and the database's on-delete rules.
+
+`test/helpers.js` is the place to start when writing new tests: `registeredClient()` gives you a logged-in user, `registerKey()` a real RSA public key on the server.
+
 ## Project Structure
 
 ```text
@@ -112,9 +122,11 @@ digital-signature-tool/
 │   ├── schema.prisma        # Database schema (users, sessions, signature_log, public_keys, user_settings)
 │   └── migrations/          # SQL migration history
 ├── scripts/
-│   └── gen-ca-chain.sh      # OpenSSL PKI generation script
+│   ├── gen-ca-chain.sh      # OpenSSL PKI generation script
+│   └── prepare-test-db.js   # Builds the migrated template DB for tests
 ├── server/                  # Node.js/Express backend
-│   ├── server.js            # Entry point, HTTPS server (port 3443)
+│   ├── server.js            # Entry point: loads .env, starts HTTPS (port 3443)
+│   ├── app.js               # Express app: middleware + routes (used by server.js and tests)
 │   ├── auth.js              # /api/auth/*  (register, login, logout, me)
 │   ├── settings.js          # /api/settings  (per-user crypto preferences)
 │   ├── keys.js              # /api/keys/*   (register/list/look up/delete public keys)
@@ -123,6 +135,7 @@ digital-signature-tool/
 │   ├── sessionStore.js      # Custom express-session Store backed by Prisma
 │   ├── middleware.js        # requireAuth + rate limiters
 │   └── validators.js        # Centralized input/length validation
+├── test/                    # API and database tests (npm test)
 ├── dev.db                   # SQLite database — gitignored (created by migrate deploy)
 ├── certs/                   # Generated certificates — gitignored
 ├── .env.example             # Template for .env (DATABASE_URL, SESSION_SECRET)

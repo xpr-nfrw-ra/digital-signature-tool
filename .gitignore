@@ -13,3 +13,10 @@ dev.db-shm
 
 # Local planning notes
 backend-phases.txt
+
+# Test databases
+test/.tmp/
+
+# Personal Claude Code settings and hooks
+.claude/settings.local.json
+.claude/hooks/
