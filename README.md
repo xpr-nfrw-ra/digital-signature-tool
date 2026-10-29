@@ -6,9 +6,10 @@ This branch (`main`) runs over HTTPS using a proper 3-tier PKI: Root CA → Inte
 
 ## Features
 
-- **File Signing** — sign any file with an RSA private key (client-side; logged to your audit history when signed in). The `.sig` file is a self-describing JSON envelope `{ v, alg, hash, sig }`, so verifiers don't need to match the signer's algorithm settings manually.
-- **Signature Verification** — verify a file against a public key, either uploaded or looked up server-side. The verify page has its own algorithm picker that auto-fills (and locks) from the `.sig` envelope; for legacy raw-base64 signatures, the user can set the algorithm and hash for that single verification without touching their saved settings.
-- **Key Generation** — generate RSA key pairs (2048 / 3072 / 4096 bits); the public half is auto-registered for logged-in users
+- **File Signing** — sign any file with an RSA or ECDSA private key (client-side; logged to your audit history when signed in). The algorithm is taken from the key itself. The `.sig` file is a self-describing JSON envelope `{ v, alg, hash, sig }`, so verifiers don't need to match the signer's settings.
+- **Signature Verification** — verify a file against a public key, either uploaded or looked up server-side. RSA or ECDSA is detected from the public key; the hash is auto-filled (and locked) from the `.sig` envelope, and for legacy raw-base64 signatures the user picks it for that single verification without touching their saved settings.
+- **Key Generation** — generate RSA (2048 / 3072 / 4096 bits) or ECDSA (P-256 / P-384 / P-521) key pairs; the public half is auto-registered for logged-in users
+- **Standard formats** — keys are PEM (PKCS#1/PKCS#8 private, SPKI public); RSA signatures are PKCS#1 v1.5 and ECDSA signatures are DER, so both verify with OpenSSL, e.g. `openssl dgst -sha256 -verify pub.pem -signature sig.bin file` after base64-decoding the `sig` field. RSA uses forge.js; ECDSA uses the browser's Web Crypto API.
 - **Public Key Directory** — a user can register multiple public keys; verifiers look them up by exact username (returns all of that user's keys) or by fingerprint (returns the single matching key).
 - **Preferred Public Key** — Settings → "My Public Keys" lists all of a user's registered keys with a radio-button picker for the preferred one. Stored in `user_settings.default_public_key_id`; it is a personal bookmark only — it does not hide or restrict which of your keys others can find.
 - **User Accounts & Settings** — session-based auth (sessions persisted across restarts); per-user crypto preferences saved server-side
@@ -169,7 +170,7 @@ SQLite via Prisma ORM. [prisma/schema.prisma](prisma/schema.prisma) is the sourc
 | `sessions` | express-session rows: `id` (= `connect.sid`), `user_id`, `session_data` (JSON), `expires_at` (indexed), `created_at` | A row appears only on login/register (`saveUninitialized: false`). 2-hour sliding idle timeout, refreshed on every authenticated request; expired rows are purged at startup and lazily on read. Deleted on logout. No IP/user-agent stored. |
 | `public_keys` | `fingerprint` (unique, SHA-256 of DER SPKI), `public_key_pem`, `label`, `user_id` | A user may have many keys; all are returned by username lookup. |
 | `signature_log` | `user_id` (indexed), `public_key_id`, `document_name`, `document_hash` (indexed), `signed_at` | Evidence of a signing event. The signing itself happens in the browser. |
-| `user_settings` | `hash_algorithm`, `signature_algorithm`, `key_size`, `default_public_key_id` | 1-to-1 with `users`; defaults inserted on registration. The default key is only a bookmark — it doesn't restrict lookups. |
+| `user_settings` | `hash_algorithm`, `signature_algorithm`, `key_size`, `default_public_key_id` | 1-to-1 with `users`; defaults inserted on registration. `key_size` is 2048/3072/4096; for ECDSA these mean P-256/P-384/P-521. The default key is only a bookmark — it doesn't restrict lookups. |
 
 **What happens on delete** (declared in the schema, enforced by SQLite):
 
@@ -225,4 +226,3 @@ Look for `Verify return code: 0 (ok)` to confirm the chain validates correctly.
 
 - Anyone holding a session cookie is that user — there is no device binding or "log out other sessions".
 - Rate-limit counters are in memory and per IP; an attacker spread over many IPs can still guess one account's password slowly.
-- Choosing ECDSA in settings currently produces RSA keys.

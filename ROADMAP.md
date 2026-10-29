@@ -17,10 +17,10 @@ What's left, what still needs deciding, and why things are the way they are. [RE
 - [x] Signing history pagination (`GET /signatures/mine?limit=&cursor=`)
 - [x] Audit log lookup by document hash (`GET /signatures/by-hash/:hash`), with indexes on `signature_log.document_hash` and `user_id`
 - [x] Account deletion (`DELETE /auth/account`): soft delete with current-password re-confirmation, plus a Delete Account section in Settings
+- [x] Real ECDSA (P-256 / P-384 / P-521) via the Web Crypto API, alongside RSA
 
 ### Next, in order
-1. [ ] **ECDSA**: today the browser generates RSA keys when ECDSA is selected (`public/js/crypto.js`). *Needs decision D3.* The backend change is only `ALLOWED_SIG` in `server/settings.js`.
-2. [ ] **Production deployment** — once there is a target server. See the plan below.
+1. [ ] **Production deployment** — once there is a target server. See the plan below.
 
 ### Smaller items
 - [ ] Optional: a signing-history view and a "who signed this file?" check in the frontend — both APIs exist, nothing in the UI calls them yet.
@@ -29,7 +29,7 @@ What's left, what still needs deciding, and why things are the way they are. [RE
 
 ## Open decisions
 
-- **D3. ECDSA: implement or remove?** Implement with the Web Crypto API (P-256/P-384, SPKI PEM export so fingerprints still work), or remove the option and reset stored `ecdsa` settings with a migration.
+No open decisions right now.
 
 ## Decision log
 
@@ -38,6 +38,8 @@ What's left, what still needs deciding, and why things are the way they are. [RE
 - **Account deletion is a soft delete (D2, 2026-10-29).** The user row is kept with `deleted_at` set, renamed to `deleted:<id>` (an illegal username, so the real name is freed and can't be collided with), and its password hash replaced with an unmatchable value; settings and all sessions are deleted. Keys and signing history stay, so signatures made before deletion remain verifiable; lookups show the owner as `accountDeleted` with no name. Hard delete was rejected because anyone who had ever signed something could then never delete their account.
 - **Hash lookup shows any user's signatures (D1, 2026-10-29).** `GET /signatures/by-hash/:hash` returns every signer of a document to any logged-in user, so the audit log can back up a signature ("did Alice sign this exact file?"), not just serve as private history. It returns only username, key fingerprint and time — not the signer's document name, which may reveal more than the hash. You must already hold the file (or its hash) to ask, matching the targeted-lookup approach for public keys.
 - **Cursor pagination on id.** Signing history pages by `id < cursor`, newest first; ids follow insertion order, so new entries never shift later pages (offset paging would).
+- **ECDSA implemented, not removed (D3, 2026-10-29).** Uses the browser's Web Crypto API (forge.js has no ECDSA). The existing 2048/3072/4096 key-size setting maps to P-256/P-384/P-521, so no schema change. Keys are PKCS#8/SPKI PEM and signatures DER, so they interoperate with OpenSSL and the server's fingerprinting.
+- **The key decides the algorithm.** Signing and verification detect RSA vs ECDSA from the key, not from settings or the `.sig` label. A key can't be used with the wrong algorithm, and signatures made before real ECDSA existed (labelled "ecdsa" but RSA inside) still verify.
 - **No list-all public keys endpoint.** Lookup needs an exact username or fingerprint, which limits passive enumeration.
 - **No per-username login lockout.** It would let anyone lock a victim out. Rate limits are per IP (login, register) and per user (re-auth routes), and only wrong-password (401) responses count.
 - **Rate-limit counters in memory.** Fine for a single instance; they reset on restart. Revisit if the app runs on multiple processes.

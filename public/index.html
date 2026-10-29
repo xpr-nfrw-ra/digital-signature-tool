@@ -148,19 +148,15 @@
                         </div>
 
                         <div class="input-group" id="verifyAlgoGroup">
-                            <label>Verification algorithm</label>
+                            <label>Hash algorithm</label>
                             <div class="verify-algo-row">
                                 <select id="verifyHash">
                                     <option value="sha256">SHA-256</option>
                                     <option value="sha384">SHA-384</option>
                                     <option value="sha512">SHA-512</option>
                                 </select>
-                                <select id="verifySigAlg">
-                                    <option value="rsa">RSA</option>
-                                    <option value="ecdsa">ECDSA</option>
-                                </select>
                             </div>
-                            <div class="verify-algo-note" id="verifyAlgoNote">Pick a signature file to auto-detect, or set manually for legacy files. Your account settings are not affected.</div>
+                            <div class="verify-algo-note" id="verifyAlgoNote">Pick a signature file to auto-detect, or set manually for legacy files. RSA or ECDSA is detected from the public key. Your account settings are not affected.</div>
                         </div>
 
                         <div class="input-group" id="keyLookupGroup">
@@ -224,7 +220,7 @@
 
                         <div class="info-box">
                             <h3>About These Settings</h3>
-                            <p>These settings determine the cryptographic algorithms used for signing and verification. SHA-256 with RSA-2048 provides strong security for most use cases.</p>
+                            <p>These settings determine the algorithm and key size used when generating new keys, and the hash used when signing. SHA-256 with RSA-2048 or ECDSA P-256 provides strong security for most use cases; ECDSA keys and signatures are much smaller. An existing key always signs with its own algorithm.</p>
                         </div>
                     </div>
 
