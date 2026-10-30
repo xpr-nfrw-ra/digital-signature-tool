@@ -4,10 +4,15 @@
   "description": "Digital signature tool with HTTPS authentication",
   "main": "server/server.js",
   "scripts": {
+    "setup": "node scripts/setup.js",
+    "prestart": "node scripts/preflight.js",
     "start": "node server/server.js",
+    "predev": "node scripts/preflight.js",
+    "dev": "node --watch server/server.js",
+    "db": "prisma studio",
+    "test": "node scripts/prepare-test-db.js && node --test \"test/**/*.test.js\"",
     "generate-ca-chain": "bash scripts/gen-ca-chain.sh",
-    "postinstall": "prisma generate",
-    "test": "node scripts/prepare-test-db.js && node --test \"test/**/*.test.js\""
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.1",

@@ -4,6 +4,30 @@ A browser-based tool for creating and verifying digital signatures. All cryptogr
 
 The app runs over HTTPS using a proper 3-tier PKI: Root CA → Intermediate CA → Server certificate, all generated locally with OpenSSL. Importing the Root CA into your OS trust store gives a genuine green padlock with no browser warnings.
 
+## Quick start
+
+**You need:** [Node.js](https://nodejs.org/) 22 LTS or newer (`node --version` to check) and, on Windows, [Git for Windows](https://git-scm.com/) (it provides the `bash` and `openssl` used to create the HTTPS certificates). macOS and Linux already have both.
+
+Get the code and open a terminal in its folder:
+
+```bash
+git clone https://github.com/xpr-nfrw-ra/digital-signature-tool.git
+cd digital-signature-tool
+```
+
+Then:
+
+| Step | Command | Windows shortcut |
+|---|---|---|
+| 1. Set up (first time only) | `npm run setup` | double-click `setup.bat` |
+| 2. Trust the certificate (first time only) | see [Trust the certificate](#trust-the-certificate) | |
+| 3. Start the app | `npm run dev` | double-click `start.bat` |
+| 4. Open it | **https://localhost:3443** | |
+
+Register an account (or continue as a guest) and you're in. To stop the app, press **Ctrl+C** in its window (`start.bat` then asks *Terminate batch job (Y/N)?* — press **Y**).
+
+Next time, only step 3 is needed. After a `git pull`, also just start the app: new database changes are applied automatically.
+
 ## Features
 
 - **File Signing** — sign any file with an RSA or ECDSA private key (client-side; logged to your audit history when signed in). The algorithm is taken from the key itself. The `.sig` file is a self-describing JSON envelope `{ v, alg, hash, sig }`, so verifiers don't need to match the signer's settings.
@@ -17,90 +41,68 @@ The app runs over HTTPS using a proper 3-tier PKI: Root CA → Intermediate CA �
 - **User Accounts & Settings** — session-based auth (sessions persisted across restarts); per-user crypto preferences saved server-side
 - **Guest Mode** — use signing/verification without an account
 
-## Requirements
+## Running the app
 
-- [Node.js](https://nodejs.org/) 20.19+, 22.12+, or 24+ (required by Prisma 7)
-- [OpenSSL](https://www.openssl.org/) 1.1+ and `bash` on your PATH (`openssl version` to verify; Git for Windows provides both)
+### Everyday commands
 
-## Setup & Running
+| Command | What it does |
+|---|---|
+| `npm run dev` | Starts the app. Restarts it automatically whenever you save a file in `server/` — use this while developing. Changes in `public/` need only a browser refresh. |
+| `npm start` | Starts the app without auto-restart. |
+| `npm test` | Runs the automated tests (no server or certificates needed). See [Running tests](#running-tests). |
+| `npm run db` | Opens Prisma Studio at <http://localhost:5555> to browse or edit the database. Stop it with Ctrl+C. |
+| `npm run setup` | Runs setup again — needed only if you deleted `.env` or `certs/`. Safe to re-run; finished steps are skipped. |
 
-### Convenience scripts (Windows)
+Before starting, `npm run dev` and `npm start` check that setup was done (and tell you if not) and apply any new database migrations.
 
-Two `.bat` scripts in the repo root wrap the steps below:
+**Debugging in VS Code:** open *Run and Debug* (Ctrl+Shift+D), pick **Start server (debug)** and press F5. Breakpoints in `server/` then work. **Run tests (debug)** does the same for the test suite.
 
-- `setup.bat` — runs `npm install`, creates `.env` with a random `SESSION_SECRET` (if missing), runs `npx prisma migrate deploy`, and generates the CA chain. Use it once after cloning; it's safe to re-run.
-- `start.bat` — opens two cmd windows, one running `npm start` (server) and one running `npx prisma studio` (DB inspector).
+### Trust the certificate
 
-Double-click either, or run from any terminal. The manual steps below still work if you prefer them.
+The app uses its own certificate authority, created by setup in `certs/`. Until your computer trusts it, the browser shows a "connection is not private" warning. Do this once:
 
-### 1. Install dependencies
+**Windows** — in PowerShell, from the project folder (Chrome and Edge use this automatically):
 
-```bash
-npm install
+```powershell
+Import-Certificate -FilePath .\certs\rootCA.crt -CertStoreLocation Cert:\CurrentUser\Root
 ```
 
-`postinstall` runs `prisma generate` automatically so the Prisma Client is built against the current schema.
+Click **Yes** when Windows asks to confirm. (Or by hand: `Win + R` → `certmgr.msc` → *Trusted Root Certification Authorities* → right-click *Certificates* → *All Tasks* → *Import* → choose `certs\rootCA.crt` → Next → Finish → Yes.)
 
-### 2. Create `.env`
+**Firefox** keeps its own list: Settings → *Privacy & Security* → *View Certificates* → *Authorities* → *Import* → choose `certs/rootCA.crt` → tick *Trust this CA to identify websites*.
 
-Copy `.env.example` to `.env` and set `SESSION_SECRET` to a random string of at least 32 characters:
+Restart the browser afterwards. If you ever delete `certs/` and run setup again, a new authority is created and you need to import the new `rootCA.crt`.
 
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
+> Keep `certs/rootCA.key` private: while the authority is trusted, anyone with that file could create certificates your computer accepts for any website. It never leaves your machine (`certs/` is gitignored). Remove the authority again in `certmgr.msc` when you stop working on the project.
 
-`DATABASE_URL` (default `file:./dev.db`, relative to the project root) is read by both the Prisma CLI and the server. The server refuses to start without a valid `SESSION_SECRET`. `.env` is gitignored.
+### Troubleshooting
 
-### 3. Initialize the database
+| You see | Do this |
+|---|---|
+| *The app is not set up yet: …* | Run `npm run setup` (or double-click `setup.bat`). |
+| Browser warning: *Your connection is not private* | [Trust the certificate](#trust-the-certificate), then restart the browser. |
+| `EADDRINUSE` … `3443` | The app is already running in another window. Use that one, or close it first. |
+| Setup stops with *"bash" was not found* | Install [Git for Windows](https://git-scm.com/), open a new terminal, run setup again. |
+| *Node.js … is too old* | Install Node.js 22 LTS or newer. |
+| You want an empty database | `npx prisma migrate reset` — **deletes all data**, then recreates the tables. |
 
-```bash
-npx prisma migrate deploy
-```
+### What setup creates
 
-This creates `dev.db` (gitignored) and applies all migrations in `prisma/migrations/`. Re-run after any `git pull` that brings new migrations.
+All of these stay on your machine and are gitignored.
 
-To browse the data later: `npx prisma studio` (UI at <http://localhost:5555>). For a full reset: `npx prisma migrate reset`.
+| Item | Purpose |
+|---|---|
+| `node_modules/` | Installed dependencies (`npm install`, which also builds the Prisma client). |
+| `.env` | Settings, copied from `.env.example`: `DATABASE_URL` (default `file:./dev.db`) and a random `SESSION_SECRET` that signs session cookies. The server refuses to start without a secret of at least 32 characters. To make one by hand: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `dev.db` | The SQLite database, created and kept up to date by `npx prisma migrate deploy`. |
+| `certs/` | The certificate chain made by `scripts/gen-ca-chain.sh` (see below). |
 
-### 4. Generate the CA chain (one-time)
-
-```bash
-npm run generate-ca-chain
-```
-
-This runs `scripts/gen-ca-chain.sh` and creates the following in `certs/`:
-
-| File | Description |
+| Certificate file | Description |
 |------|-------------|
 | `rootCA.key` / `rootCA.crt` | Root CA — self-signed, 10-year validity |
 | `intermediate.key` / `intermediate.crt` | Intermediate CA — signed by Root, 5 years |
-| `server.key` / `server.crt` | Server cert — signed by Intermediate, 1 year |
-| `chain.crt` | Intermediate + Root bundle sent during TLS handshake |
-
-### 5. Trust the Root CA (optional but recommended)
-
-Without this step the browser shows a certificate warning. With it, you get a proper green padlock.
-
-**Windows (Chrome / Edge inherit this automatically):**
-1. Press `Win + R`, type `certmgr.msc`, press Enter
-2. Expand **Trusted Root Certification Authorities** → right-click **Certificates** → **All Tasks** → **Import**
-3. Browse to `certs/rootCA.crt` → Next → Next → Finish → Yes
-
-**Firefox** (manages its own trust store):
-- `about:preferences#privacy` → **View Certificates** → **Authorities** → **Import** → select `certs/rootCA.crt` → check *Trust this CA to identify websites* → OK
-
-Restart the browser after importing.
-
-### 6. Start the server
-
-```bash
-npm start
-```
-
-### 7. Open the app
-
-Navigate to **https://localhost:3443**.
-
-After importing the Root CA you should see a closed padlock. Click it → **Connection is secure** → **Certificate is valid** to inspect the full chain.
+| `server.key` / `server.crt` | Server certificate for `localhost`, `signtool.local`, `127.0.0.1` — signed by Intermediate, 1 year |
+| `chain.crt` | Intermediate + Root bundle sent during the TLS handshake |
 
 ## Running tests
 
@@ -125,6 +127,8 @@ digital-signature-tool/
 │   ├── schema.prisma        # Database schema (users, sessions, signature_log, public_keys, user_settings)
 │   └── migrations/          # SQL migration history
 ├── scripts/
+│   ├── setup.js             # npm run setup — first-time setup
+│   ├── preflight.js         # Runs before npm start / dev: checks setup, applies migrations
 │   ├── gen-ca-chain.sh      # OpenSSL PKI generation script
 │   └── prepare-test-db.js   # Builds the migrated template DB for tests
 ├── server/                  # Node.js/Express backend
@@ -142,6 +146,8 @@ digital-signature-tool/
 ├── dev.db                   # SQLite database — gitignored (created by migrate deploy)
 ├── certs/                   # Generated certificates — gitignored
 ├── .env.example             # Template for .env (DATABASE_URL, SESSION_SECRET)
+├── .vscode/launch.json      # VS Code debug configurations (F5)
+├── setup.bat, start.bat     # Windows double-click shortcuts for npm run setup / npm run dev
 ├── ROADMAP.md               # Remaining work, open decisions, decision log
 └── package.json
 ```

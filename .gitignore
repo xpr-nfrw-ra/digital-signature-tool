@@ -24,5 +24,6 @@ test/.tmp/
 # Playwright MCP output (screenshots, downloads)
 .playwright-mcp/
 
-# Editor settings
-.vscode/
+# Editor settings (personal), except the shared debug configurations
+.vscode/*
+!.vscode/launch.json
