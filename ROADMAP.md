@@ -10,7 +10,7 @@ What's left, what still needs deciding, and why things are the way they are. [RE
 - [x] Username and password change with current-password re-confirmation
 - [x] HTTPS with a local Root CA → Intermediate CA → server certificate chain
 - [x] Public key directory (lookup by exact username or fingerprint) and signing audit log
-- [x] Fresh-clone setup works (`setup.bat` creates `.env`, migrates, generates certs)
+- [x] Fresh-clone setup works (`npm run setup` creates `.env`, migrates, generates certs)
 - [x] `SESSION_SECRET` and `DATABASE_URL` from `.env`
 - [x] Rate limiting on login, register and password re-confirmation
 - [x] Automated tests (`npm test`) across auth, sessions, rate limits, access control, keys, settings, signature log, validators and on-delete rules
@@ -40,7 +40,7 @@ No open decisions right now.
 - **Cursor pagination on id.** Signing history pages by `id < cursor`, newest first; ids follow insertion order, so new entries never shift later pages (offset paging would).
 - **ECDSA implemented, not removed (D3, 2026-10-29).** Uses the browser's Web Crypto API (forge.js has no ECDSA). The existing 2048/3072/4096 key-size setting maps to P-256/P-384/P-521, so no schema change. Keys are PKCS#8/SPKI PEM and signatures DER, so they interoperate with OpenSSL and the server's fingerprinting.
 - **The key decides the algorithm.** Signing and verification detect RSA vs ECDSA from the key, not from settings or the `.sig` label. A key can't be used with the wrong algorithm, and signatures made before real ECDSA existed (labelled "ecdsa" but RSA inside) still verify.
-- **npm scripts are the way to run the project.** `npm run setup`, `npm run dev`, `npm start`, `npm run db`, `npm test` work on any OS; `setup.bat` / `start.bat` are one-line double-click wrappers. `start` and `dev` run `scripts/preflight.js` first, which explains what is missing if setup was skipped and applies new migrations, so a `git pull` never leaves the database behind the code.
+- **npm scripts are the way to run the project.** `npm run setup`, `npm run dev`, `npm start`, `npm run db`, `npm test` work on any OS. The Windows `setup.bat` / `start.bat` double-click wrappers were removed (2026-11-16) so there is one way to run it. `start` and `dev` run `scripts/preflight.js` first, which explains what is missing if setup was skipped and applies new migrations, so a `git pull` never leaves the database behind the code.
 - **No list-all public keys endpoint.** Lookup needs an exact username or fingerprint, which limits passive enumeration.
 - **No per-username login lockout.** It would let anyone lock a victim out. Rate limits are per IP (login, register) and per user (re-auth routes), and only wrong-password (401) responses count.
 - **Rate-limit counters in memory.** Fine for a single instance; they reset on restart. Revisit if the app runs on multiple processes.

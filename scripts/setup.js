@@ -1,4 +1,4 @@
-// setup.js - First-time setup: `npm run setup` (or double-click setup.bat).
+// setup.js - First-time setup: `npm run setup`.
 // Safe to run again: every step skips work that is already done.
 const fs = require('fs');
 const path = require('path');
@@ -66,6 +66,6 @@ Setup complete.
 Next:
   1. Trust the certificate once, so your browser shows no warning
      (see "Trust the certificate" in README.md).
-  2. Start the app:   npm run dev      (or double-click start.bat)
+  2. Start the app:   npm run dev
   3. Open:            https://localhost:3443
 `);

@@ -9,7 +9,7 @@ const ROOT = path.join(__dirname, '..');
 const at = (...p) => path.join(ROOT, ...p);
 
 function notSetUp(what) {
-    console.error(`\nThe app is not set up yet: ${what}.\nRun this first:   npm run setup      (or double-click setup.bat)\n`);
+    console.error(`\nThe app is not set up yet: ${what}.\nRun this first:   npm run setup\n`);
     process.exit(1);
 }
 

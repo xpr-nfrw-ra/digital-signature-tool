@@ -8,25 +8,53 @@ The app runs over HTTPS using a proper 3-tier PKI: Root CA → Intermediate CA �
 
 **You need:** [Node.js](https://nodejs.org/) 22 LTS or newer (`node --version` to check) and, on Windows, [Git for Windows](https://git-scm.com/) (it provides the `bash` and `openssl` used to create the HTTPS certificates). macOS and Linux already have both.
 
-Get the code and open a terminal in its folder:
+Run all commands in a terminal (PowerShell on Windows) in the project folder.
+
+### First time
 
 ```bash
 git clone https://github.com/xpr-nfrw-ra/digital-signature-tool.git
 cd digital-signature-tool
+npm run setup
 ```
 
-Then:
+`npm run setup` installs the dependencies and creates `.env`, the database (`dev.db`) and the HTTPS certificates (`certs/`). See [What setup creates](#what-setup-creates).
 
-| Step | Command | Windows shortcut |
-|---|---|---|
-| 1. Set up (first time only) | `npm run setup` | double-click `setup.bat` |
-| 2. Trust the certificate (first time only) | see [Trust the certificate](#trust-the-certificate) | |
-| 3. Start the app | `npm run dev` | double-click `start.bat` |
-| 4. Open it | **https://localhost:3443** | |
+Then trust the certificate once, so the browser shows no warning. On Windows, in PowerShell:
 
-Register an account (or continue as a guest) and you're in. To stop the app, press **Ctrl+C** in its window (`start.bat` then asks *Terminate batch job (Y/N)?* — press **Y**).
+```powershell
+Import-Certificate -FilePath .\certs\rootCA.crt -CertStoreLocation Cert:\CurrentUser\Root
+```
 
-Next time, only step 3 is needed. After a `git pull`, also just start the app: new database changes are applied automatically.
+Click **Yes** when Windows asks, then restart the browser. Firefox needs its own import: see [Trust the certificate](#trust-the-certificate).
+
+Now start the app as described next.
+
+### Start the app (first time and every time after)
+
+```bash
+npm run dev
+```
+
+Open **https://localhost:3443**, register an account (or continue as a guest) and you're in. To stop the app, press **Ctrl+C**.
+
+After a `git pull`, just start the app again: new database changes are applied automatically when it starts. If the pull changed `package.json`, run `npm install` first.
+
+### Open the database admin page
+
+```bash
+npm run db
+```
+
+This opens Prisma Studio at **http://localhost:5555**, where you can browse and edit every table. It runs on its own, so if the app is already running, use a second terminal. Stop it with **Ctrl+C**. For a different port: `npm run db -- --port 5556`.
+
+### Run the tests
+
+```bash
+npm test
+```
+
+No running app or certificates needed. See [Running tests](#running-tests).
 
 ## Features
 
@@ -43,7 +71,7 @@ Next time, only step 3 is needed. After a `git pull`, also just start the app: n
 
 ## Running the app
 
-### Everyday commands
+### All commands
 
 | Command | What it does |
 |---|---|
@@ -79,7 +107,7 @@ Restart the browser afterwards. If you ever delete `certs/` and run setup again,
 
 | You see | Do this |
 |---|---|
-| *The app is not set up yet: …* | Run `npm run setup` (or double-click `setup.bat`). |
+| *The app is not set up yet: …* | Run `npm run setup`. |
 | Browser warning: *Your connection is not private* | [Trust the certificate](#trust-the-certificate), then restart the browser. |
 | `EADDRINUSE` … `3443` | The app is already running in another window. Use that one, or close it first. |
 | Setup stops with *"bash" was not found* | Install [Git for Windows](https://git-scm.com/), open a new terminal, run setup again. |
@@ -148,7 +176,6 @@ digital-signature-tool/
 ├── certs/                   # Generated certificates — gitignored
 ├── .env.example             # Template for .env (DATABASE_URL, SESSION_SECRET)
 ├── .vscode/launch.json      # VS Code debug configurations (F5)
-├── setup.bat, start.bat     # Windows double-click shortcuts for npm run setup / npm run dev
 ├── ROADMAP.md               # Remaining work, open decisions, decision log
 └── package.json
 ```
