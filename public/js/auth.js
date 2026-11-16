@@ -43,6 +43,7 @@ function showApp(username) {
     if (accountCard) {
         accountCard.style.display = username ? '' : 'none';
     }
+    document.getElementById('accountUsername').textContent = username || '';
     loginPage.style.display = 'none';
     mainApp.classList.add('active');
     hideError();
@@ -55,6 +56,7 @@ function showApp(username) {
 window.updateDisplayedUsername = function(newUsername) {
     currentUser = newUsername;
     displayUsername.textContent = 'Logged in as: ' + newUsername;
+    document.getElementById('accountUsername').textContent = newUsername;
 };
 
 function showError(msg) {

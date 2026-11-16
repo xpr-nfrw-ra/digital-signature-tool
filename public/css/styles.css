@@ -600,6 +600,87 @@ body {
     border-color: #4a90e2;
 }
 
+/* ===== ACCOUNT CARD ===== */
+.account-row,
+.danger-zone {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.account-row {
+    padding: 14px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.account-row-info {
+    min-width: 0;
+}
+
+.account-row-label {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.account-row-label.danger {
+    color: #c62828;
+}
+
+.account-row-value {
+    font-size: 0.95em;
+    color: #2c2c2c;
+    overflow-wrap: anywhere;
+}
+
+.account-row-hint {
+    font-size: 0.85em;
+    color: #666;
+}
+
+.account-row .modal-button,
+.danger-zone .modal-button {
+    flex-shrink: 0;
+    padding: 8px 16px;
+}
+
+.danger-zone {
+    margin-top: 20px;
+    padding: 14px 16px;
+    border: 1px solid #f5c2c0;
+    border-radius: 8px;
+    background: #fffafa;
+}
+
+.danger-note {
+    background: #fdecea;
+    border: 1px solid #f5c2c0;
+    color: #7a1c1c;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 20px;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+.account-modal .modal {
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* Keep room for the show/hide button; .modal-input-group input would otherwise reset it. */
+.modal-input-group .password-wrapper input {
+    padding-right: 42px;
+}
+
+.modal-button.danger:hover:not(:disabled) {
+    background: #a51f1f;
+}
+
 /* ===== MODAL ===== */
 .modal-overlay {
     display: none;
@@ -714,12 +795,6 @@ body {
 .modal-button.danger {
     background: #c62828;
     color: white;
-}
-
-.settings-note {
-    font-size: 0.9em;
-    color: #666;
-    margin: 0 0 12px;
 }
 
 .modal-button.secondary:hover {

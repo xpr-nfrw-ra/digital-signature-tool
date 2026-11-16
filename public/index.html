@@ -253,62 +253,30 @@
                     <div class="card" id="accountCard">
                         <div class="card-title">Account</div>
 
-                        <div class="settings-section">
-                            <h3>Change Username</h3>
-                            <div class="settings-group">
-                                <label>Current Password</label>
-                                <div class="password-wrapper">
-                                    <input type="password" id="usernameCurrentPassword" placeholder="Confirm with your current password">
-                                    <button type="button" class="password-toggle" data-target="usernameCurrentPassword" aria-label="Toggle password visibility">👁</button>
-                                </div>
+                        <div class="account-message" id="accountMessage"></div>
+
+                        <div class="account-row">
+                            <div class="account-row-info">
+                                <div class="account-row-label">Username</div>
+                                <div class="account-row-value" id="accountUsername"></div>
                             </div>
-                            <div class="settings-group">
-                                <label>New Username</label>
-                                <input type="text" id="newUsername" placeholder="Enter a new username">
-                            </div>
-                            <div class="account-message" id="usernameMessage"></div>
-                            <button class="modal-button primary" id="changeUsernameButton">Update Username</button>
+                            <button class="modal-button secondary" id="openUsernameModal">Change</button>
                         </div>
 
-                        <div class="settings-section">
-                            <h3>Change Password</h3>
-                            <div class="settings-group">
-                                <label>Current Password</label>
-                                <div class="password-wrapper">
-                                    <input type="password" id="passwordCurrentPassword" placeholder="Enter your current password">
-                                    <button type="button" class="password-toggle" data-target="passwordCurrentPassword" aria-label="Toggle password visibility">👁</button>
-                                </div>
+                        <div class="account-row">
+                            <div class="account-row-info">
+                                <div class="account-row-label">Password</div>
+                                <div class="account-row-value">••••••••</div>
                             </div>
-                            <div class="settings-group">
-                                <label>New Password</label>
-                                <div class="password-wrapper">
-                                    <input type="password" id="newPassword" placeholder="Enter a new password">
-                                    <button type="button" class="password-toggle" data-target="newPassword" aria-label="Toggle password visibility">👁</button>
-                                </div>
-                            </div>
-                            <div class="settings-group">
-                                <label>Confirm New Password</label>
-                                <div class="password-wrapper">
-                                    <input type="password" id="confirmNewPassword" placeholder="Re-enter the new password">
-                                    <button type="button" class="password-toggle" data-target="confirmNewPassword" aria-label="Toggle password visibility">👁</button>
-                                </div>
-                            </div>
-                            <div class="account-message" id="passwordMessage"></div>
-                            <button class="modal-button primary" id="changePasswordButton">Update Password</button>
+                            <button class="modal-button secondary" id="openPasswordModal">Change</button>
                         </div>
 
-                        <div class="settings-section">
-                            <h3>Delete Account</h3>
-                            <p class="settings-note">Your username is freed and you are logged out everywhere. Your registered public keys and signing history are kept, so signatures you made can still be verified; they will show as belonging to a deleted account. This cannot be undone.</p>
-                            <div class="settings-group">
-                                <label>Current Password</label>
-                                <div class="password-wrapper">
-                                    <input type="password" id="deleteAccountPassword" placeholder="Confirm with your current password">
-                                    <button type="button" class="password-toggle" data-target="deleteAccountPassword" aria-label="Toggle password visibility">👁</button>
-                                </div>
+                        <div class="danger-zone">
+                            <div class="account-row-info">
+                                <div class="account-row-label danger">Delete account</div>
+                                <div class="account-row-hint">Permanently delete your account. This cannot be undone.</div>
                             </div>
-                            <div class="account-message" id="deleteAccountMessage"></div>
-                            <button class="modal-button danger" id="deleteAccountButton">Delete Account</button>
+                            <button class="modal-button danger" id="openDeleteModal">Delete…</button>
                         </div>
                     </div>
                 </div>
@@ -354,6 +322,90 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Account modals (Settings → Account) -->
+    <div class="modal-overlay account-modal" id="usernameModal">
+        <form class="modal" id="usernameForm" novalidate>
+            <div class="modal-header">
+                <h2>Change username</h2>
+                <p>Other users will find your public keys under the new name.</p>
+            </div>
+            <div class="modal-input-group">
+                <label for="newUsername">New username</label>
+                <input type="text" id="newUsername" placeholder="Enter a new username" autocomplete="username">
+            </div>
+            <div class="modal-input-group">
+                <label for="usernameCurrentPassword">Current password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="usernameCurrentPassword" placeholder="Confirm with your current password" autocomplete="current-password">
+                    <button type="button" class="password-toggle" data-target="usernameCurrentPassword" aria-label="Toggle password visibility">👁</button>
+                </div>
+            </div>
+            <div class="account-message" id="usernameMessage"></div>
+            <div class="modal-buttons">
+                <button type="button" class="modal-button secondary" data-close-modal>Cancel</button>
+                <button type="submit" class="modal-button primary" id="changeUsernameButton">Update username</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="modal-overlay account-modal" id="passwordModal">
+        <form class="modal" id="passwordForm" novalidate>
+            <div class="modal-header">
+                <h2>Change password</h2>
+                <p>Your other sessions will be logged out.</p>
+            </div>
+            <div class="modal-input-group">
+                <label for="passwordCurrentPassword">Current password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="passwordCurrentPassword" placeholder="Enter your current password" autocomplete="current-password">
+                    <button type="button" class="password-toggle" data-target="passwordCurrentPassword" aria-label="Toggle password visibility">👁</button>
+                </div>
+            </div>
+            <div class="modal-input-group">
+                <label for="newPassword">New password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="newPassword" placeholder="Enter a new password" autocomplete="new-password">
+                    <button type="button" class="password-toggle" data-target="newPassword" aria-label="Toggle password visibility">👁</button>
+                </div>
+            </div>
+            <div class="modal-input-group">
+                <label for="confirmNewPassword">Confirm new password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="confirmNewPassword" placeholder="Re-enter the new password" autocomplete="new-password">
+                    <button type="button" class="password-toggle" data-target="confirmNewPassword" aria-label="Toggle password visibility">👁</button>
+                </div>
+            </div>
+            <div class="account-message" id="passwordMessage"></div>
+            <div class="modal-buttons">
+                <button type="button" class="modal-button secondary" data-close-modal>Cancel</button>
+                <button type="submit" class="modal-button primary" id="changePasswordButton">Update password</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="modal-overlay account-modal" id="deleteModal">
+        <form class="modal" id="deleteForm" novalidate>
+            <div class="modal-header">
+                <h2>Delete account</h2>
+            </div>
+            <div class="danger-note">
+                Your username is freed and you are logged out everywhere. Your registered public keys and signing history are kept, so signatures you made can still be verified; they will show as belonging to a deleted account. <strong>This cannot be undone.</strong>
+            </div>
+            <div class="modal-input-group">
+                <label for="deleteAccountPassword">Current password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="deleteAccountPassword" placeholder="Confirm with your current password" autocomplete="current-password">
+                    <button type="button" class="password-toggle" data-target="deleteAccountPassword" aria-label="Toggle password visibility">👁</button>
+                </div>
+            </div>
+            <div class="account-message" id="deleteAccountMessage"></div>
+            <div class="modal-buttons">
+                <button type="button" class="modal-button secondary" data-close-modal>Cancel</button>
+                <button type="submit" class="modal-button danger" id="deleteAccountButton">Delete my account</button>
+            </div>
+        </form>
     </div>
 
     <!-- Scripts -->

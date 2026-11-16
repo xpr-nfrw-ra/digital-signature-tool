@@ -295,42 +295,15 @@ navItems.forEach(item => {
 
 window.loadMyKeys = loadMyKeys;
 
-// Clears the account-card inputs and messages on logout.
+// Clears the account inputs and messages and closes any open account dialog on logout.
 window.resetAccountForms = function() {
-    const ids = [
-        'usernameCurrentPassword', 'newUsername',
-        'passwordCurrentPassword', 'newPassword', 'confirmNewPassword',
-        'deleteAccountPassword',
-    ];
-    for (const id of ids) {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-    }
-    for (const id of ['usernameMessage', 'passwordMessage', 'deleteAccountMessage']) {
-        const el = document.getElementById(id);
-        if (el) {
-            el.textContent = '';
-            el.style.display = 'none';
-        }
-    }
-    if (myKeysList) myKeysList.innerHTML = '';
-    if (myKeysStatus) {
-        myKeysStatus.textContent = 'Loading your keys…';
-        myKeysStatus.style.display = 'block';
-    }
-    // Signing history belongs to the previous user too.
-    const historyListEl = document.getElementById('historyList');
-    const historyStatusEl = document.getElementById('historyStatus');
-    const historyMoreEl = document.getElementById('historyMore');
-    if (historyListEl) historyListEl.replaceChildren();
-    if (historyMoreEl) historyMoreEl.style.display = 'none';
-    if (historyStatusEl) {
-        historyStatusEl.textContent = 'Loading your history…';
-        historyStatusEl.style.display = 'block';
-    }
+    closeAccountModal();
+    setAccountMessage('accountMessage', '', false);
 };
 
-// ===== ACCOUNT (change username / change password) =====
+// ===== ACCOUNT (change username / change password / delete account) =====
+// The Account card shows one row per action; each "Change"/"Delete…" button opens
+// a dialog that asks for only what that action needs, including the current password.
 
 function setAccountMessage(elementId, text, isError) {
     const el = document.getElementById(elementId);
@@ -339,10 +312,66 @@ function setAccountMessage(elementId, text, isError) {
     el.style.display = text ? 'block' : 'none';
 }
 
+const accountModals = {
+    username: { overlay: 'usernameModal', message: 'usernameMessage', firstInput: 'newUsername' },
+    password: { overlay: 'passwordModal', message: 'passwordMessage', firstInput: 'passwordCurrentPassword' },
+    delete:   { overlay: 'deleteModal',   message: 'deleteAccountMessage', firstInput: 'deleteAccountPassword' },
+};
+let openAccountModal = null;
+let accountModalOpener = null;
+
+// Empties every field in a dialog and puts the show/hide-password toggles back to "hidden".
+function clearAccountModal(overlay) {
+    overlay.querySelectorAll('input').forEach(input => {
+        input.value = '';
+        if (input.closest('.password-wrapper')) input.type = 'password';
+    });
+    overlay.querySelectorAll('.password-toggle').forEach(btn => { btn.textContent = '👁'; });
+}
+
+function showAccountModal(name, opener) {
+    const m = accountModals[name];
+    const overlay = document.getElementById(m.overlay);
+    closeAccountModal();
+    clearAccountModal(overlay);
+    setAccountMessage(m.message, '', false);
+    setAccountMessage('accountMessage', '', false);
+    overlay.classList.add('active');
+    openAccountModal = name;
+    accountModalOpener = opener || null;
+    document.getElementById(m.firstInput).focus();
+}
+
+function closeAccountModal() {
+    if (!openAccountModal) return;
+    const overlay = document.getElementById(accountModals[openAccountModal].overlay);
+    overlay.classList.remove('active');
+    clearAccountModal(overlay);
+    openAccountModal = null;
+    if (accountModalOpener && document.body.contains(accountModalOpener)) accountModalOpener.focus();
+    accountModalOpener = null;
+}
+
+document.getElementById('openUsernameModal').addEventListener('click', e => showAccountModal('username', e.currentTarget));
+document.getElementById('openPasswordModal').addEventListener('click', e => showAccountModal('password', e.currentTarget));
+document.getElementById('openDeleteModal').addEventListener('click', e => showAccountModal('delete', e.currentTarget));
+
+// Cancel button, a click on the dimmed background, or Escape closes the dialog.
+document.querySelectorAll('.account-modal').forEach(overlay => {
+    overlay.addEventListener('click', e => {
+        if (e.target === overlay || e.target.closest('[data-close-modal]')) closeAccountModal();
+    });
+});
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && openAccountModal) closeAccountModal();
+});
+
 const changeUsernameButton = document.getElementById('changeUsernameButton');
 const changePasswordButton = document.getElementById('changePasswordButton');
+const deleteAccountButton = document.getElementById('deleteAccountButton');
 
-changeUsernameButton.addEventListener('click', async () => {
+document.getElementById('usernameForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
     const currentPassword = document.getElementById('usernameCurrentPassword').value;
     const newUsername = document.getElementById('newUsername').value;
 
@@ -361,12 +390,11 @@ changeUsernameButton.addEventListener('click', async () => {
         });
         const data = await res.json();
         if (res.ok) {
-            setAccountMessage('usernameMessage', 'Username updated.', false);
-            document.getElementById('usernameCurrentPassword').value = '';
-            document.getElementById('newUsername').value = '';
             if (typeof window.updateDisplayedUsername === 'function') {
                 window.updateDisplayedUsername(data.user.username);
             }
+            closeAccountModal();
+            setAccountMessage('accountMessage', 'Username updated.', false);
         } else {
             setAccountMessage('usernameMessage', data.error || 'Update failed.', true);
         }
@@ -377,7 +405,8 @@ changeUsernameButton.addEventListener('click', async () => {
     }
 });
 
-changePasswordButton.addEventListener('click', async () => {
+document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
     const currentPassword = document.getElementById('passwordCurrentPassword').value;
     const newPassword = document.getElementById('newPassword').value;
     const confirmNewPassword = document.getElementById('confirmNewPassword').value;
@@ -401,10 +430,8 @@ changePasswordButton.addEventListener('click', async () => {
         });
         const data = await res.json();
         if (res.ok) {
-            setAccountMessage('passwordMessage', 'Password updated.', false);
-            document.getElementById('passwordCurrentPassword').value = '';
-            document.getElementById('newPassword').value = '';
-            document.getElementById('confirmNewPassword').value = '';
+            closeAccountModal();
+            setAccountMessage('accountMessage', 'Password updated.', false);
         } else {
             setAccountMessage('passwordMessage', data.error || 'Update failed.', true);
         }
@@ -415,16 +442,13 @@ changePasswordButton.addEventListener('click', async () => {
     }
 });
 
-const deleteAccountButton = document.getElementById('deleteAccountButton');
-
-deleteAccountButton.addEventListener('click', async () => {
+// The dialog itself (warning text + password) is the confirmation step.
+document.getElementById('deleteForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
     const currentPassword = document.getElementById('deleteAccountPassword').value;
 
     if (!currentPassword) {
         setAccountMessage('deleteAccountMessage', 'Enter your current password to confirm.', true);
-        return;
-    }
-    if (!confirm('Delete your account? This cannot be undone. Your public keys and signing history will be kept for verification.')) {
         return;
     }
 
@@ -438,6 +462,7 @@ deleteAccountButton.addEventListener('click', async () => {
         });
         const data = await res.json();
         if (res.ok) {
+            closeAccountModal();
             alert('Your account has been deleted.');
             // Reuse the logout flow to clear per-user state and return to the login page.
             document.getElementById('logoutButton').click();
