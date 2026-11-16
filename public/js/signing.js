@@ -1,7 +1,5 @@
 // signing.js - File signing functionality
 
-let generatedPrivateKey = null;
-
 // DOM elements
 const signButton = document.getElementById('signButton');
 const signingProgress = document.getElementById('signingProgress');
@@ -47,11 +45,33 @@ cancelGenerate.addEventListener('click', () => {
     document.getElementById('keyName').value = '';
 });
 
+// Puts a key into the "Private Key" file field, exactly as if the user had picked it.
+// Signing always reads that field, so what it shows is what gets used.
+function setPrivateKeyField(privateKeyPem, fileName) {
+    const dt = new DataTransfer();
+    dt.items.add(new File([privateKeyPem], fileName, { type: 'application/x-pem-file' }));
+    document.getElementById('privateKey').files = dt.files;
+    const textSpan = document.querySelector('#privateKeyWrapper .file-text');
+    textSpan.textContent = fileName;
+    textSpan.classList.add('selected-file');
+}
+
+// Key names become file names and the key's label on the server (1-64 characters).
+const KEY_NAME_MAX = 64;
+
 // Confirm key generation
 confirmGenerate.addEventListener('click', async () => {
     const keyName = document.getElementById('keyName').value.trim();
     if (!keyName) {
         alert('Please enter a key name');
+        return;
+    }
+    if (keyName.length > KEY_NAME_MAX) {
+        alert(`The key name can be at most ${KEY_NAME_MAX} characters.`);
+        return;
+    }
+    if (/[\x00-\x1F\x7F]/.test(keyName)) {
+        alert('The key name cannot contain control characters.');
         return;
     }
 
@@ -63,9 +83,9 @@ confirmGenerate.addEventListener('click', async () => {
         // Generate key pair (PEM) with selected algorithm
         const { privateKeyPem, publicKeyPem } = await generateKeyPair(appSettings.keySize, appSettings.signatureAlgorithm);
 
-        // Store private key for auto-fill
-        generatedPrivateKey = privateKeyPem;
-        
+        // Select the new private key for signing straight away, however the dialog is closed.
+        setPrivateKeyField(privateKeyPem, `${keyName}_private.pem`);
+
         // Download both keys
         downloadFile(privateKeyPem, `${keyName}_private.pem`, 'application/x-pem-file');
         downloadFile(publicKeyPem, `${keyName}_public.pem`, 'application/x-pem-file');
@@ -114,31 +134,12 @@ confirmGenerate.addEventListener('click', async () => {
 closeSuccess.addEventListener('click', () => {
     generateKeyModal.classList.remove('active');
     document.getElementById('keyName').value = '';
-    
-    // Auto-fill private key if just generated
-    if (generatedPrivateKey) {
-        const privateKeyFile = new File(
-            [generatedPrivateKey], 
-            'generated_private.pem', 
-            { type: 'application/x-pem-file' }
-        );
-        const dt = new DataTransfer();
-        dt.items.add(privateKeyFile);
-        document.getElementById('privateKey').files = dt.files;
-        
-        const textSpan = document.querySelector('#privateKeyWrapper .file-text');
-        textSpan.textContent = 'generated_private.pem';
-        textSpan.classList.add('selected-file');
-        generatedPrivateKey = null;
-    }
 });
 
 // Clears signing-page inputs and any in-memory state from the previous session.
 // Called on logout so a new user never sees the previous user's selected file
-// or in-memory generated private key.
+// or freshly generated private key.
 window.resetSigningForm = function() {
-    generatedPrivateKey = null;
-
     const fileToSign = document.getElementById('fileToSign');
     const privateKey = document.getElementById('privateKey');
     if (fileToSign) fileToSign.value = '';
@@ -181,7 +182,7 @@ signButton.addEventListener('click', async () => {
         return;
     }
     
-    if (!keyInput.files[0] && !generatedPrivateKey) {
+    if (!keyInput.files[0]) {
         alert('Please select a private key or generate one');
         return;
     }
@@ -193,8 +194,7 @@ signButton.addEventListener('click', async () => {
         // Read file data
         const fileData = await readFileAsArrayBuffer(fileInput.files[0]);
         
-        // Read or use generated private key
-        const privateKeyPem = generatedPrivateKey || await readFileAsText(keyInput.files[0]);
+        const privateKeyPem = await readFileAsText(keyInput.files[0]);
         
         // Sign the file. The algorithm comes from the key itself (an RSA key always
         // signs with RSA, an EC key with ECDSA), whatever the settings say.
@@ -217,24 +217,31 @@ signButton.addEventListener('click', async () => {
         // Log the signing event on the server (auth required; non-fatal on failure).
         let logNote = '';
         if (currentUser) {
+            const notLogged = reason => `\n(Note: signing not logged — ${String(reason).replace(/\.+$/, '')}.)`;
+            let entry = null;
             try {
-                const documentHash = hashFileHex(fileData, appSettings.hashAlgorithm);
-                const publicKeyFingerprint = await fingerprintFromPrivateKeyPem(privateKeyPem);
-                const res = await fetch('/api/signatures', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        documentName: originalFileName,
-                        documentHash,
-                        publicKeyFingerprint,
-                    }),
-                });
-                if (!res.ok) {
-                    const data = await res.json().catch(() => ({}));
-                    logNote = `\n(Note: signing not logged — ${data.error || 'server error'}.)`;
-                }
+                entry = {
+                    documentName: originalFileName,
+                    documentHash: await digestHex(fileData, appSettings.hashAlgorithm),
+                    publicKeyFingerprint: await fingerprintFromPrivateKeyPem(privateKeyPem),
+                };
             } catch (e) {
-                logNote = '\n(Note: signing not logged — network error.)';
+                logNote = notLogged(e.message);
+            }
+            if (entry) {
+                try {
+                    const res = await fetch('/api/signatures', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(entry),
+                    });
+                    if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        logNote = notLogged(data.error || 'server error');
+                    }
+                } catch (e) {
+                    logNote = notLogged('network error');
+                }
             }
         }
 

@@ -1,5 +1,6 @@
 const { describe, it, after } = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('crypto');
 const {
     prisma, client, registeredClient, uniqueUsername, newPublicKeyPem, registerKey, sha256Hex, cleanup,
 } = require('./helpers');
@@ -68,6 +69,26 @@ describe('register public key', () => {
             { label: 'k', publicKeyPem: broken },
         ]) {
             assert.equal((await c.post('/api/keys', body)).status, 400);
+        }
+    });
+
+    it('accepts only RSA >= 2048 bits with e=65537 and ECDSA on P-256/384/521', async () => {
+        const { client: c } = await registeredClient('policy');
+        const spki = opts => crypto.generateKeyPairSync(...opts).publicKey.export({ type: 'spki', format: 'pem' });
+        const cases = [
+            [['rsa', { modulusLength: 1024 }], 400, /at least 2048/],
+            [['rsa', { modulusLength: 2048, publicExponent: 3 }], 400, /65537/],
+            [['ed25519'], 400, /Only RSA and ECDSA/],
+            [['ec', { namedCurve: 'secp256k1' }], 400, /P-256, P-384 or P-521/],
+            [['rsa', { modulusLength: 3072 }], 201],
+            [['ec', { namedCurve: 'prime256v1' }], 201],
+            [['ec', { namedCurve: 'secp384r1' }], 201],
+            [['ec', { namedCurve: 'secp521r1' }], 201],
+        ];
+        for (const [opts, status, message] of cases) {
+            const res = await c.post('/api/keys', { label: 'k', publicKeyPem: spki(opts) });
+            assert.equal(res.status, status, JSON.stringify(opts));
+            if (message) assert.match(res.body.error, message);
         }
     });
 });

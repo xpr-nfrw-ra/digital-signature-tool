@@ -15,6 +15,27 @@ function fingerprintFromPem(pem) {
     return crypto.createHash('sha256').update(der).digest('hex');
 }
 
+// Only keys the app can use, and that are strong enough, may be registered: RSA of at
+// least 2048 bits with the standard public exponent, or ECDSA on a curve every browser
+// supports. Anything else could never verify in the app or would be weak.
+const MIN_RSA_BITS = 2048;
+const ALLOWED_CURVES = new Set(['prime256v1', 'secp384r1', 'secp521r1']); // P-256, P-384, P-521
+
+function keyPolicyError(pem) {
+    const key = crypto.createPublicKey(pem);
+    const details = key.asymmetricKeyDetails || {};
+    if (key.asymmetricKeyType === 'rsa') {
+        if (details.modulusLength < MIN_RSA_BITS) return `RSA keys must be at least ${MIN_RSA_BITS} bits`;
+        if (details.publicExponent !== 65537n) return 'RSA keys must use the standard public exponent 65537';
+        return null;
+    }
+    if (key.asymmetricKeyType === 'ec') {
+        if (!ALLOWED_CURVES.has(details.namedCurve)) return 'ECDSA keys must use the P-256, P-384 or P-521 curve';
+        return null;
+    }
+    return 'Only RSA and ECDSA public keys are supported';
+}
+
 router.post('/', requireAuth, async (req, res) => {
     try {
         const { label, publicKeyPem } = req.body;
@@ -27,6 +48,8 @@ router.post('/', requireAuth, async (req, res) => {
         } catch (e) {
             return res.status(400).json({ error: 'Invalid PEM-encoded public key' });
         }
+        const policyErr = keyPolicyError(publicKeyPem);
+        if (policyErr) return res.status(400).json({ error: policyErr });
 
         const existing = await prisma.publicKey.findUnique({ where: { fingerprint } });
         if (existing) {

@@ -11,8 +11,13 @@ const LIMITS = {
         pattern: /^[a-zA-Z0-9_.-]+$/,
         patternMsg: 'may only contain letters, digits, dot, underscore, and hyphen',
     },
-    // New passwords (register, change password).
-    password: { min: 8, max: 128 },
+    // New passwords (register, change password). bcrypt only uses the first 72 bytes of a
+    // password, so anything longer would give a false sense of strength: two passwords
+    // sharing their first 72 bytes would be interchangeable.
+    password: {
+        min: 8, maxBytes: 72,
+        maxBytesMsg: 'must be at most 72 bytes (72 plain letters, digits or symbols; accented letters and emoji use 2–4 bytes each)',
+    },
     // Passwords being checked against a stored hash (login, re-confirmation). No minimum:
     // accounts created when the minimum was 6 must still be able to log in.
     currentPassword: { min: 1, max: 128 },
@@ -61,6 +66,9 @@ function checkString(name, value, limits) {
     }
     if (limits.max != null && v.length > limits.max) {
         return `${name} must be at most ${limits.max} characters`;
+    }
+    if (limits.maxBytes != null && Buffer.byteLength(v, 'utf8') > limits.maxBytes) {
+        return `${name} ${limits.maxBytesMsg}`;
     }
     if (limits.noControlChars && CONTROL_CHARS.test(v)) {
         return `${name} must not contain control characters`;

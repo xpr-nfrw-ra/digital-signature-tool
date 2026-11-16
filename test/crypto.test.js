@@ -1,5 +1,5 @@
-// Tests the browser crypto code (public/js/crypto.js) by running it, together with the
-// bundled forge.min.js, in a sandbox that provides the browser globals it needs.
+// Tests the browser crypto code (public/js/crypto.js) by running it in a sandbox that
+// provides the browser globals it needs (Web Crypto, atob/btoa).
 // Node's own crypto (OpenSSL) is used as an independent reference implementation.
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -13,8 +13,8 @@ const { fingerprintFromPem } = require('../server/keys');
 after(cleanup);
 
 function loadBrowserCrypto() {
-    // Share the host's binary types: forge checks `instanceof ArrayBuffer` on Web Crypto
-    // output, which fails across realms (in a browser there is only one realm).
+    // Share the host's binary types so Web Crypto output and our byte arrays mix freely
+    // (in a browser there is only one realm).
     const sandbox = {
         crypto: globalThis.crypto, atob, btoa, setTimeout, clearTimeout, console,
         ArrayBuffer, Uint8Array, DataView, TextEncoder,
@@ -22,7 +22,7 @@ function loadBrowserCrypto() {
     sandbox.window = sandbox;
     sandbox.self = sandbox;
     vm.createContext(sandbox);
-    for (const file of ['public/lib/forge.min.js', 'public/js/crypto.js']) {
+    for (const file of ['public/js/crypto.js']) {
         const code = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
         vm.runInContext(code, sandbox, { filename: file });
     }
@@ -141,12 +141,86 @@ describe('ECDSA sign and verify', () => {
     });
 });
 
-describe('RSA and legacy signatures', () => {
-    it('RSA sign/verify is unchanged and OpenSSL-compatible', async () => {
-        const { signature } = await bc.signFile(FILE, rsaKeys.privateKeyPem, 'sha256');
-        assert.deepEqual(plain(await bc.verifySignature(FILE, signature, rsaKeys.publicKeyPem, 'sha256')), { alg: 'rsa', valid: true });
-        assert.ok(nodeCrypto.verify('sha256', Buffer.from(FILE), rsaKeys.publicKeyPem, Buffer.from(signature, 'base64')));
+describe('RSA sign and verify (Web Crypto)', () => {
+    for (const bits of ['2048', '3072', '4096']) {
+        it(`generates RSA-${bits} keys as PKCS#8 / SPKI PEM with exponent 65537`, async () => {
+            const { privateKeyPem, publicKeyPem } = await bc.generateKeyPair(bits, 'rsa');
+            assert.match(privateKeyPem, /^-----BEGIN PRIVATE KEY-----\n/);
+            assert.match(publicKeyPem, /^-----BEGIN PUBLIC KEY-----\n/);
+            const details = nodeCrypto.createPublicKey(publicKeyPem).asymmetricKeyDetails;
+            assert.equal(details.modulusLength, Number(bits));
+            assert.equal(details.publicExponent, 65537n);
+            assert.equal(nodeCrypto.createPrivateKey(privateKeyPem).asymmetricKeyType, 'rsa');
+        });
+    }
+
+    for (const hash of ['sha256', 'sha384', 'sha512']) {
+        it(`${hash}: valid, interoperable with OpenSSL both ways, rejects tampering and wrong hash`, async () => {
+            const { signature } = await bc.signFile(FILE, rsaKeys.privateKeyPem, hash);
+            assert.deepEqual(plain(await bc.verifySignature(FILE, signature, rsaKeys.publicKeyPem, hash)), { alg: 'rsa', valid: true });
+            assert.equal((await bc.verifySignature(TAMPERED, signature, rsaKeys.publicKeyPem, hash)).valid, false);
+            const other = hash === 'sha256' ? 'sha384' : 'sha256';
+            assert.equal((await bc.verifySignature(FILE, signature, rsaKeys.publicKeyPem, other)).valid, false);
+            assert.ok(nodeCrypto.verify(NODE_HASH[hash], Buffer.from(FILE), rsaKeys.publicKeyPem, Buffer.from(signature, 'base64')));
+            const nodeSig = nodeCrypto.sign(NODE_HASH[hash], Buffer.from(FILE), rsaKeys.privateKeyPem).toString('base64');
+            assert.equal((await bc.verifySignature(FILE, nodeSig, rsaKeys.publicKeyPem, hash)).valid, true);
+        });
+    }
+
+    it('accepts PKCS#1 and PKCS#8 RSA private keys and PKCS#1 RSA public keys', async () => {
+        const { privateKey, publicKey } = nodeCrypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+        const pkcs8 = privateKey.export({ type: 'pkcs8', format: 'pem' });
+        const pkcs1Pub = publicKey.export({ type: 'pkcs1', format: 'pem' });
+        const spki = publicKey.export({ type: 'spki', format: 'pem' });
+        const { signature } = await bc.signFile(FILE, pkcs8, 'sha256');
+        assert.equal((await bc.verifySignature(FILE, signature, pkcs1Pub, 'sha256')).valid, true);
+        assert.equal(await bc.fingerprintFromPublicKeyPem(pkcs1Pub), fingerprintFromPem(spki));
+        assert.equal(await bc.fingerprintFromPrivateKeyPem(pkcs8), fingerprintFromPem(spki));
     });
+
+    it('signs and verifies large files (no call-stack or memory blow-up)', async () => {
+        const big = new Uint8Array(40 * 1024 * 1024);
+        for (let i = 0; i < big.length; i += 4096) big[i] = i & 0xff;
+        const { signature } = await bc.signFile(big.buffer, rsaKeys.privateKeyPem, 'sha256');
+        assert.equal((await bc.verifySignature(big.buffer, signature, rsaKeys.publicKeyPem, 'sha256')).valid, true);
+        assert.ok(nodeCrypto.verify('sha256', Buffer.from(big.buffer), rsaKeys.publicKeyPem, Buffer.from(signature, 'base64')));
+    });
+
+    it('treats malformed RSA signatures as invalid instead of throwing', async () => {
+        const { signature } = await bc.signFile(FILE, rsaKeys.privateKeyPem, 'sha256');
+        const sig = Buffer.from(signature, 'base64');
+        for (const bad of ['', 'not base64!!', sig.subarray(1).toString('base64'), Buffer.concat([sig, Buffer.from([0])]).toString('base64')]) {
+            assert.equal((await bc.verifySignature(FILE, bad, rsaKeys.publicKeyPem, 'sha256')).valid, false, JSON.stringify(bad));
+        }
+    });
+
+    it('refuses an unknown hash instead of reporting a result', async () => {
+        const { signature } = await bc.signFile(FILE, rsaKeys.privateKeyPem, 'sha256');
+        await assert.rejects(bc.verifySignature(FILE, signature, rsaKeys.publicKeyPem, 'md5'), /Unsupported hash algorithm/);
+    });
+});
+
+describe('key formats', () => {
+    it('accepts SEC1 ("EC PRIVATE KEY") keys on every curve', async () => {
+        for (const curve of Object.values(NODE_CURVE)) {
+            const { privateKey, publicKey } = nodeCrypto.generateKeyPairSync('ec', { namedCurve: curve });
+            const sec1 = privateKey.export({ type: 'sec1', format: 'pem' });
+            const spki = publicKey.export({ type: 'spki', format: 'pem' });
+            const { alg, signature } = await bc.signFile(FILE, sec1, 'sha256');
+            assert.equal(alg, 'ecdsa');
+            assert.equal((await bc.verifySignature(FILE, signature, spki, 'sha256')).valid, true);
+            assert.equal(await bc.fingerprintFromPrivateKeyPem(sec1), fingerprintFromPem(spki));
+        }
+    });
+
+    it('explains password-protected keys instead of calling them invalid', async () => {
+        const { privateKey } = nodeCrypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+        const encrypted = privateKey.export({ type: 'pkcs8', format: 'pem', cipher: 'aes-256-cbc', passphrase: 'pw' });
+        await assert.rejects(bc.signFile(FILE, encrypted, 'sha256'), /password-protected/);
+    });
+});
+
+describe('legacy signatures', () => {
 
     it('an old "ecdsa" signature made with an RSA key still verifies', async () => {
         // Before real ECDSA, choosing ECDSA produced RSA keys and RSA signatures labelled "ecdsa".
@@ -164,12 +238,12 @@ describe('fingerprints and the server', () => {
         }
     });
 
-    it('fingerprintFromPublicKeyPem and digestHex match the server and forge', async () => {
+    it('fingerprintFromPublicKeyPem and digestHex match the server and OpenSSL', async () => {
         for (const keys of [rsaKeys, ...Object.values(ecKeys)]) {
             assert.equal(await bc.fingerprintFromPublicKeyPem(keys.publicKeyPem), fingerprintFromPem(keys.publicKeyPem));
         }
         for (const hash of ['sha256', 'sha384', 'sha512']) {
-            assert.equal(await bc.digestHex(FILE, hash), bc.hashFileHex(FILE, hash));
+            assert.equal(await bc.digestHex(FILE, hash), nodeCrypto.createHash(hash).update(Buffer.from(FILE)).digest('hex'));
         }
     });
 
@@ -182,11 +256,11 @@ describe('fingerprints and the server', () => {
 
             const log = await client.post('/api/signatures', {
                 documentName: 'ec.txt',
-                documentHash: bc.hashFileHex(FILE, 'sha256'),
+                documentHash: await bc.digestHex(FILE, 'sha256'),
                 publicKeyFingerprint: reg.body.key.fingerprint,
             });
             assert.equal(log.status, 201);
         }
-        assert.equal(bc.hashFileHex(FILE, 'sha256'), sha256Hex('The quick brown fox signs the contract.'));
+        assert.equal(await bc.digestHex(FILE, 'sha256'), sha256Hex('The quick brown fox signs the contract.'));
     });
 });

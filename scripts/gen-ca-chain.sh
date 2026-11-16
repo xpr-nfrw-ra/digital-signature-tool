@@ -4,6 +4,12 @@
 
 set -euo pipefail
 
+# Git Bash on Windows rewrites arguments that look like Unix paths, which turns
+# -subj "/C=US/..." into "C:/Program Files/Git/C=US/...". Turn that off; other
+# platforms ignore these variables.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL='*'
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CERTS_DIR="$SCRIPT_DIR/../certs"
 

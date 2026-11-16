@@ -860,6 +860,7 @@ body {
 .key-lookup-result li    { padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 4px; cursor: pointer; background: #fafafa; }
 .key-lookup-result li:hover    { background: #eef; }
 .key-lookup-result li.selected { background: #e3f2fd; border-color: #2196f3; }
+.key-lookup-result .lookup-selected { color: #2e7d32; margin-top: 4px; }
 
 /* ===== VERIFY-PAGE ALGORITHM PICKER ===== */
 .verify-algo-row {

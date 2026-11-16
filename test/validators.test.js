@@ -39,6 +39,13 @@ describe('validate', () => {
         assert.equal(validate({ currentPassword: ' ' }), null, 'a single space is a non-empty password');
     });
 
+    it('caps new passwords at 72 UTF-8 bytes (what bcrypt actually uses)', () => {
+        assert.equal(validate({ password: 'x'.repeat(72) }), null);
+        assert.match(validate({ password: 'x'.repeat(73) }), /72 bytes/);
+        assert.match(validate({ password: 'ü'.repeat(37) }), /72 bytes/, '37 two-byte characters = 74 bytes');
+        assert.equal(validate({ currentPassword: 'x'.repeat(100) }), null, 'existing passwords are still accepted at login');
+    });
+
     it('requires at least 8 characters for new passwords, but any length for current ones', () => {
         assert.match(validate({ password: '1234567' }), /at least 8/);
         assert.equal(validate({ password: '12345678' }), null);

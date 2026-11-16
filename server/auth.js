@@ -11,6 +11,17 @@ const router = express.Router();
 
 const SALT_ROUNDS = 10;
 
+// Usernames are unique regardless of case, so nobody can register "Alice" next to "alice"
+// and pass as them in key lookups. The stored spelling is kept as typed.
+async function usernameTaken(username, exceptUserId = 0) {
+    const rows = await prisma.$queryRaw`
+        SELECT id FROM users WHERE username = ${username} COLLATE NOCASE AND id <> ${exceptUserId} LIMIT 1`;
+    return rows.length > 0;
+}
+
+// Prisma's unique-constraint error: two requests raced past the check above.
+const isUniqueViolation = err => err && err.code === 'P2002';
+
 // POST /api/auth/register
 router.post('/register', registerLimiter, async (req, res) => {
     try {
@@ -24,13 +35,18 @@ router.post('/register', registerLimiter, async (req, res) => {
             return res.status(400).json({ error: err });
         }
 
-        const existing = await userStore.findUserByUsername(username.trim());
-        if (existing) {
+        if (await usernameTaken(username.trim())) {
             return res.status(409).json({ error: 'Username already taken' });
         }
 
         const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-        const user = await userStore.createUser(username.trim(), hashedPassword);
+        let user;
+        try {
+            user = await userStore.createUser(username.trim(), hashedPassword);
+        } catch (createErr) {
+            if (isUniqueViolation(createErr)) return res.status(409).json({ error: 'Username already taken' });
+            throw createErr;
+        }
         await ensureSettings(user.id);
 
         req.session.regenerate(regenErr => {
@@ -95,12 +111,24 @@ router.post('/logout', (req, res) => {
     });
 });
 
-// GET /api/auth/me
-router.get('/me', (req, res) => {
-    if (req.session && req.session.user) {
-        res.json({ user: req.session.user });
-    } else {
-        res.status(401).json({ error: 'Not authenticated' });
+// GET /api/auth/me — read from the database, not the session, so a username changed on
+// another device shows up here too.
+router.get('/me', async (req, res) => {
+    try {
+        if (!req.session || !req.session.user) {
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
+        const user = await prisma.user.findUnique({ where: { id: req.session.user.id } });
+        if (!user || user.deletedAt) {
+            return req.session.destroy(() => res.status(401).json({ error: 'Not authenticated' }));
+        }
+        if (user.username !== req.session.user.username) {
+            req.session.user = { id: user.id, username: user.username };
+        }
+        res.json({ user: { id: user.id, username: user.username } });
+    } catch (err) {
+        console.error('Me error:', err);
+        res.status(500).json({ error: 'Failed to load the current user' });
     }
 });
 
@@ -133,15 +161,21 @@ router.put('/username', requireAuth, reauthLimiter, async (req, res) => {
             return res.status(400).json({ error: 'New username must differ from the current one' });
         }
 
-        const conflict = await prisma.user.findUnique({ where: { username: trimmed } });
-        if (conflict) {
+        // Excluding this user lets someone change only the case of their own name.
+        if (await usernameTaken(trimmed, user.id)) {
             return res.status(409).json({ error: 'Username already taken' });
         }
 
-        const updated = await prisma.user.update({
-            where: { id: user.id },
-            data: { username: trimmed },
-        });
+        let updated;
+        try {
+            updated = await prisma.user.update({
+                where: { id: user.id },
+                data: { username: trimmed },
+            });
+        } catch (updateErr) {
+            if (isUniqueViolation(updateErr)) return res.status(409).json({ error: 'Username already taken' });
+            throw updateErr;
+        }
         req.session.user = { id: updated.id, username: updated.username };
         res.json({ success: true, user: { username: updated.username } });
     } catch (err) {
@@ -151,7 +185,8 @@ router.put('/username', requireAuth, reauthLimiter, async (req, res) => {
 });
 
 // PUT /api/auth/password — change the logged-in user's password.
-// Requires current password re-confirmation. Rotates the session ID on success.
+// Requires current password re-confirmation. Logs out every other session (someone who
+// stole a session must not outlive the password change) and rotates this one's ID.
 router.put('/password', requireAuth, reauthLimiter, async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
@@ -178,10 +213,14 @@ router.put('/password', requireAuth, reauthLimiter, async (req, res) => {
         }
 
         const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { passwordHash: newHash },
-        });
+        await prisma.$transaction([
+            prisma.user.update({
+                where: { id: user.id },
+                data: { passwordHash: newHash },
+            }),
+            // Includes this request's own session; regenerate() below issues a fresh one.
+            prisma.session.deleteMany({ where: { userId: user.id } }),
+        ]);
 
         const sessionUser = { id: user.id, username: user.username };
         req.session.regenerate(regenErr => {

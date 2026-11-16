@@ -1,7 +1,8 @@
-// crypto.js - Core cryptographic functions
-// RSA uses forge.js. ECDSA uses the browser's Web Crypto API (forge has no ECDSA);
-// keys are exported as standard PKCS#8 / SPKI PEM and ECDSA signatures are DER-encoded,
-// so both interoperate with OpenSSL and the server's Node crypto.
+// crypto.js - Core cryptographic functions, all on the browser's Web Crypto API.
+// RSA signatures are RSASSA-PKCS1-v1_5 and ECDSA signatures are DER-encoded; keys are
+// exported as PKCS#8 / SPKI PEM. Everything interoperates with OpenSSL and the server's
+// Node crypto. Web Crypto hashes natively, so large files are fast and never build
+// huge strings in memory.
 
 // Utility: Download file
 function downloadFile(content, filename, mimeType) {
@@ -13,7 +14,8 @@ function downloadFile(content, filename, mimeType) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Some browsers start the download asynchronously; revoking at once can cancel it.
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 // Utility: Read file as text
@@ -43,6 +45,7 @@ const ECDSA_CURVES = { '2048': 'P-256', '3072': 'P-384', '4096': 'P-521' };
 // Bytes per signature component (r or s) for each curve.
 const CURVE_BYTES = { 'P-256': 32, 'P-384': 48, 'P-521': 66 };
 const WEBCRYPTO_HASH = { sha256: 'SHA-256', sha384: 'SHA-384', sha512: 'SHA-512' };
+const RSA_ALG = 'RSASSA-PKCS1-v1_5';
 
 function webCryptoHash(hashAlgorithm) {
     const name = WEBCRYPTO_HASH[hashAlgorithm];
@@ -50,80 +53,140 @@ function webCryptoHash(hashAlgorithm) {
     return name;
 }
 
+// ===== DER building blocks (just enough to re-wrap key formats) =====
+
+function derLength(n) {
+    if (n < 0x80) return [n];
+    const bytes = [];
+    for (let v = n; v > 0; v = Math.floor(v / 256)) bytes.unshift(v & 0xff);
+    return [0x80 | bytes.length, ...bytes];
+}
+
+function derTlv(tag, content) {
+    return new Uint8Array([tag, ...derLength(content.length), ...content]);
+}
+
+const concatBytes = (...parts) => parts.reduce((acc, p) => new Uint8Array([...acc, ...p]), new Uint8Array());
+
+const OID = {
+    rsaEncryption: [0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01],
+    ecPublicKey: [0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01],
+    'P-256': [0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07],
+    'P-384': [0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22],
+    'P-521': [0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x23],
+};
+const RSA_ALGORITHM_ID = derTlv(0x30, [...OID.rsaEncryption, 0x05, 0x00]);
+const PKCS8_VERSION = [0x02, 0x01, 0x00];
+
+// "BEGIN RSA PRIVATE KEY" (PKCS#1) -> PKCS#8 PrivateKeyInfo
+function pkcs1PrivateToPkcs8(pkcs1) {
+    return derTlv(0x30, concatBytes(PKCS8_VERSION, RSA_ALGORITHM_ID, derTlv(0x04, pkcs1)));
+}
+
+// "BEGIN EC PRIVATE KEY" (SEC1) -> PKCS#8 for the given curve
+function sec1ToPkcs8(sec1, curve) {
+    return derTlv(0x30, concatBytes(PKCS8_VERSION, derTlv(0x30, [...OID.ecPublicKey, ...OID[curve]]), derTlv(0x04, sec1)));
+}
+
+// "BEGIN RSA PUBLIC KEY" (PKCS#1) -> SubjectPublicKeyInfo
+function pkcs1PublicToSpki(pkcs1) {
+    return derTlv(0x30, concatBytes(RSA_ALGORITHM_ID, derTlv(0x03, concatBytes([0x00], pkcs1))));
+}
+
 // ===== PEM <-> DER =====
 
-function derToPem(der, label) {
-    const bytes = new Uint8Array(der);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    const b64 = btoa(binary).match(/.{1,64}/g).join('\n');
+function derToPem(derBytes, label) {
+    const b64 = bytesToBase64(new Uint8Array(derBytes)).match(/.{1,64}/g).join('\n');
     return `-----BEGIN ${label}-----\n${b64}\n-----END ${label}-----\n`;
 }
 
 function pemToDer(pem, label) {
     const match = pem.match(new RegExp(`-----BEGIN ${label}-----([\\s\\S]+?)-----END ${label}-----`));
     if (!match) throw new Error(`Not a "${label}" PEM block`);
-    const binary = atob(match[1].replace(/\s+/g, ''));
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
+    return base64ToBytes(match[1].replace(/\s+/g, ''));
 }
 
-// ===== Key type detection =====
+// Returns { label, der } for the first PEM block in the text, or null.
+function firstPemBlock(pem) {
+    const match = String(pem).match(/-----BEGIN ([A-Z0-9 ]+)-----([\s\S]+?)-----END \1-----/);
+    if (!match) return null;
+    try {
+        return { label: match[1], der: base64ToBytes(match[2].replace(/\s+/g, '')) };
+    } catch (_) {
+        return null;
+    }
+}
 
-// Web Crypto needs the curve up front when importing an EC key, so try each one;
-// importing with the wrong curve fails.
-async function importEcKey(der, format, usages) {
+// ===== Key import =====
+// The algorithm is decided by the key itself, never by a setting, so a key can only ever
+// be used with its own algorithm. RSA keys are bound to a hash when imported.
+
+const PRIVATE_KEY_ERROR = 'Unsupported or invalid private key (expected an RSA or ECDSA private key in PEM format)';
+const PUBLIC_KEY_ERROR = 'Unsupported or invalid public key (expected an RSA or ECDSA public key in PEM format)';
+
+async function tryImport(format, keyData, algorithm, usages) {
+    try {
+        return await crypto.subtle.importKey(format, keyData, algorithm, true, usages);
+    } catch (_) {
+        return null;
+    }
+}
+
+async function importRsaOrEc(format, keyData, hashAlgorithm, usages) {
+    const rsa = await tryImport(format, keyData, { name: RSA_ALG, hash: webCryptoHash(hashAlgorithm) }, usages);
+    if (rsa) return { alg: 'rsa', key: rsa };
     for (const namedCurve of Object.values(ECDSA_CURVES)) {
-        try {
-            const key = await crypto.subtle.importKey(format, der, { name: 'ECDSA', namedCurve }, true, usages);
-            return { key, namedCurve };
-        } catch (_) {
-            // try the next curve
-        }
+        const ec = await tryImport(format, keyData, { name: 'ECDSA', namedCurve }, usages);
+        if (ec) return { alg: 'ecdsa', key: ec, namedCurve };
     }
     return null;
 }
 
-function isRsaPrivateKeyPem(pem) {
-    try { forge.pki.privateKeyFromPem(pem); return true; } catch (_) { return false; }
+// Accepts PKCS#8 ("PRIVATE KEY"), PKCS#1 ("RSA PRIVATE KEY") and SEC1 ("EC PRIVATE KEY").
+// Returns { alg, key, namedCurve? }.
+async function importPrivateKey(pem, hashAlgorithm = 'sha256') {
+    const block = firstPemBlock(pem);
+    let result = null;
+    if (block && block.label === 'PRIVATE KEY') {
+        result = await importRsaOrEc('pkcs8', block.der, hashAlgorithm, ['sign']);
+    } else if (block && block.label === 'RSA PRIVATE KEY') {
+        const key = await tryImport('pkcs8', pkcs1PrivateToPkcs8(block.der), { name: RSA_ALG, hash: webCryptoHash(hashAlgorithm) }, ['sign']);
+        if (key) result = { alg: 'rsa', key };
+    } else if (block && block.label === 'EC PRIVATE KEY') {
+        for (const namedCurve of Object.values(ECDSA_CURVES)) {
+            const key = await tryImport('pkcs8', sec1ToPkcs8(block.der, namedCurve), { name: 'ECDSA', namedCurve }, ['sign']);
+            if (key) { result = { alg: 'ecdsa', key, namedCurve }; break; }
+        }
+    } else if (block && block.label === 'ENCRYPTED PRIVATE KEY') {
+        throw new Error('This private key is password-protected. Export it without a password (e.g. openssl pkey -in key.pem -out plain.pem) and try again.');
+    }
+    if (!result) throw new Error(PRIVATE_KEY_ERROR);
+    return result;
 }
 
-function isRsaPublicKeyPem(pem) {
-    try { forge.pki.publicKeyFromPem(pem); return true; } catch (_) { return false; }
+// Accepts SPKI ("PUBLIC KEY") and PKCS#1 ("RSA PUBLIC KEY"). Returns { alg, key, namedCurve? }.
+async function importPublicKey(pem, hashAlgorithm = 'sha256') {
+    const block = firstPemBlock(pem);
+    let result = null;
+    if (block && block.label === 'PUBLIC KEY') {
+        result = await importRsaOrEc('spki', block.der, hashAlgorithm, ['verify']);
+    } else if (block && block.label === 'RSA PUBLIC KEY') {
+        const key = await tryImport('spki', pkcs1PublicToSpki(block.der), { name: RSA_ALG, hash: webCryptoHash(hashAlgorithm) }, ['verify']);
+        if (key) result = { alg: 'rsa', key };
+    }
+    if (!result) throw new Error(PUBLIC_KEY_ERROR);
+    return result;
 }
 
-async function importEcPrivateKeyPem(pem) {
-    let der;
-    try { der = pemToDer(pem, 'PRIVATE KEY'); } catch (_) { return null; }
-    return importEcKey(der, 'pkcs8', ['sign']);
-}
-
-async function importEcPublicKeyPem(pem) {
-    let der;
-    try { der = pemToDer(pem, 'PUBLIC KEY'); } catch (_) { return null; }
-    return importEcKey(der, 'spki', ['verify']);
-}
-
-// The algorithm is decided by the key itself, never by a setting, so a key can only
-// ever be used with its own algorithm.
 async function detectPrivateKeyAlgorithm(pem) {
-    if (isRsaPrivateKeyPem(pem)) return 'rsa';
-    if (await importEcPrivateKeyPem(pem)) return 'ecdsa';
-    throw new Error('Unsupported or invalid private key (expected an RSA or ECDSA PEM key)');
+    return (await importPrivateKey(pem)).alg;
 }
 
 async function detectPublicKeyAlgorithm(pem) {
-    if (isRsaPublicKeyPem(pem)) return 'rsa';
-    if (await importEcPublicKeyPem(pem)) return 'ecdsa';
-    throw new Error('Unsupported or invalid public key (expected an RSA or ECDSA PEM key)');
+    return (await importPublicKey(pem)).alg;
 }
 
 // ===== ECDSA signature encoding (IEEE P1363 r||s <-> DER SEQUENCE { r INTEGER, s INTEGER }) =====
-
-function derLength(n) {
-    return n < 0x80 ? [n] : [0x81, n];
-}
 
 function derInteger(bytes) {
     let i = 0;
@@ -141,19 +204,19 @@ function p1363ToDer(sig) {
 }
 
 // Returns null for anything that isn't a well-formed signature for this curve size.
-function derToP1363(der, componentBytes) {
+function derToP1363(derSig, componentBytes) {
     let pos = 0;
     function readLength() {
-        let len = der[pos++];
-        if (len === 0x81) len = der[pos++];
+        let len = derSig[pos++];
+        if (len === 0x81) len = derSig[pos++];
         else if (len & 0x80) return -1;
         return len;
     }
     function readInteger() {
-        if (der[pos++] !== 0x02) return null;
+        if (derSig[pos++] !== 0x02) return null;
         const len = readLength();
-        if (len <= 0 || pos + len > der.length) return null;
-        let value = der.slice(pos, pos + len);
+        if (len <= 0 || pos + len > derSig.length) return null;
+        let value = derSig.slice(pos, pos + len);
         pos += len;
         while (value.length > 1 && value[0] === 0) value = value.slice(1);
         if (value.length > componentBytes) return null;
@@ -161,12 +224,12 @@ function derToP1363(der, componentBytes) {
         padded.set(value, componentBytes - value.length);
         return padded;
     }
-    if (der[pos++] !== 0x30) return null;
+    if (derSig[pos++] !== 0x30) return null;
     const seqLen = readLength();
-    if (seqLen < 0 || pos + seqLen !== der.length) return null;
+    if (seqLen < 0 || pos + seqLen !== derSig.length) return null;
     const r = readInteger();
     const s = r && readInteger();
-    if (!r || !s || pos !== der.length) return null;
+    if (!r || !s || pos !== derSig.length) return null;
     const out = new Uint8Array(componentBytes * 2);
     out.set(r, 0);
     out.set(s, componentBytes);
@@ -197,103 +260,67 @@ function shortFp(fp) {
     return fp.length > 16 ? `${fp.slice(0, 8)}…${fp.slice(-8)}` : fp;
 }
 
-// SHA-256 fingerprint of a forge RSA public key (DER-encoded SubjectPublicKeyInfo), as hex.
-// Matches the server-side fingerprint computed by Node's crypto module.
-function fingerprintFromPublicKey(publicKey) {
-    const asn1 = forge.pki.publicKeyToAsn1(publicKey);
-    const derBytes = forge.asn1.toDer(asn1).getBytes();
-    const md = forge.md.sha256.create();
-    md.update(derBytes);
-    return md.digest().toHex();
-}
-
-// Derive the matching public-key fingerprint from a private-key PEM (RSA or ECDSA).
-async function fingerprintFromPrivateKeyPem(privateKeyPem) {
-    if (isRsaPrivateKeyPem(privateKeyPem)) {
-        const privateKey = forge.pki.privateKeyFromPem(privateKeyPem);
-        const publicKey = forge.pki.setRsaPublicKey(privateKey.n, privateKey.e);
-        return fingerprintFromPublicKey(publicKey);
-    }
-    const ec = await importEcPrivateKeyPem(privateKeyPem);
-    if (!ec) throw new Error('Unsupported or invalid private key');
-    // The private JWK carries the public point (x, y); rebuild the public key from it.
-    const { kty, crv, x, y } = await crypto.subtle.exportKey('jwk', ec.key);
-    const publicKey = await crypto.subtle.importKey('jwk', { kty, crv, x, y }, { name: 'ECDSA', namedCurve: crv }, true, ['verify']);
+async function spkiFingerprint(publicKey) {
     const spki = await crypto.subtle.exportKey('spki', publicKey);
     return bytesToHex(await crypto.subtle.digest('SHA-256', spki));
 }
 
-// SHA-256 fingerprint of a public-key PEM (RSA or EC): hash of the DER SPKI, as hex.
-async function fingerprintFromPublicKeyPem(publicKeyPem) {
-    return bytesToHex(await crypto.subtle.digest('SHA-256', pemToDer(publicKeyPem, 'PUBLIC KEY')));
+// SHA-256 of the DER SubjectPublicKeyInfo, as hex (the standard X.509 key fingerprint,
+// matching the server). Derived from the private key: its JWK carries the public part.
+async function fingerprintFromPrivateKeyPem(privateKeyPem) {
+    const { alg, key } = await importPrivateKey(privateKeyPem);
+    const jwk = await crypto.subtle.exportKey('jwk', key);
+    const publicKey = alg === 'rsa'
+        ? await crypto.subtle.importKey('jwk', { kty: 'RSA', n: jwk.n, e: jwk.e }, { name: RSA_ALG, hash: 'SHA-256' }, true, ['verify'])
+        : await crypto.subtle.importKey('jwk', { kty: 'EC', crv: jwk.crv, x: jwk.x, y: jwk.y }, { name: 'ECDSA', namedCurve: jwk.crv }, true, ['verify']);
+    return spkiFingerprint(publicKey);
 }
 
-// Hex digest using the browser's native hashing (fast for large files).
+// Same fingerprint from a public-key PEM (re-encoded, so a PKCS#1 RSA key matches its SPKI form).
+async function fingerprintFromPublicKeyPem(publicKeyPem) {
+    return spkiFingerprint((await importPublicKey(publicKeyPem)).key);
+}
+
+// Hex digest of file content using the chosen hash algorithm.
 async function digestHex(fileData, hashAlgorithm) {
     return bytesToHex(await crypto.subtle.digest(webCryptoHash(hashAlgorithm), fileData));
 }
 
-// Hex digest of file content using the chosen hash algorithm.
-function hashFileHex(fileData, hashAlgorithm) {
-    const md = forge.md[hashAlgorithm].create();
-    md.update(forge.util.binary.raw.encode(new Uint8Array(fileData)));
-    return md.digest().toHex();
-}
-
 // ===== Key generation =====
 
-function generateRSAKeyPair(keySize) {
-    return new Promise((resolve, reject) => {
-        forge.pki.rsa.generateKeyPair({ bits: parseInt(keySize), workers: 2 }, (err, keypair) => {
-            if (err) reject(err);
-            else resolve({
-                privateKeyPem: forge.pki.privateKeyToPem(keypair.privateKey),
-                publicKeyPem: forge.pki.publicKeyToPem(keypair.publicKey),
-            });
-        });
-    });
-}
-
-async function generateECDSAKeyPair(keySize) {
-    const namedCurve = ECDSA_CURVES[String(keySize)];
-    if (!namedCurve) throw new Error('Unsupported ECDSA key size: ' + keySize);
-    const keypair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve }, true, ['sign', 'verify']);
+// Returns { privateKeyPem, publicKeyPem } as PKCS#8 / SPKI PEM.
+async function generateKeyPair(keySize, algorithm) {
+    let params;
+    if (algorithm === 'rsa') {
+        const modulusLength = Number(keySize);
+        if (![2048, 3072, 4096].includes(modulusLength)) throw new Error('Unsupported RSA key size: ' + keySize);
+        params = { name: RSA_ALG, modulusLength, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' };
+    } else if (algorithm === 'ecdsa') {
+        const namedCurve = ECDSA_CURVES[String(keySize)];
+        if (!namedCurve) throw new Error('Unsupported ECDSA key size: ' + keySize);
+        params = { name: 'ECDSA', namedCurve };
+    } else {
+        throw new Error('Unsupported algorithm: ' + algorithm);
+    }
+    const keypair = await crypto.subtle.generateKey(params, true, ['sign', 'verify']);
     return {
         privateKeyPem: derToPem(await crypto.subtle.exportKey('pkcs8', keypair.privateKey), 'PRIVATE KEY'),
         publicKeyPem: derToPem(await crypto.subtle.exportKey('spki', keypair.publicKey), 'PUBLIC KEY'),
     };
 }
 
-// Returns { privateKeyPem, publicKeyPem }.
-async function generateKeyPair(keySize, algorithm) {
-    if (algorithm === 'rsa') return generateRSAKeyPair(keySize);
-    if (algorithm === 'ecdsa') return generateECDSAKeyPair(keySize);
-    throw new Error('Unsupported algorithm: ' + algorithm);
-}
-
 // ===== Signing =====
 
-function signFileRSA(fileData, privateKeyPem, hashAlgorithm) {
-    const privateKey = forge.pki.privateKeyFromPem(privateKeyPem);
-    const md = forge.md[hashAlgorithm].create();
-    md.update(forge.util.binary.raw.encode(new Uint8Array(fileData)));
-    return forge.util.encode64(privateKey.sign(md));
-}
-
-async function signFileECDSA(fileData, privateKeyPem, hashAlgorithm) {
-    const ec = await importEcPrivateKeyPem(privateKeyPem);
-    const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: webCryptoHash(hashAlgorithm) }, ec.key, fileData);
-    return bytesToBase64(p1363ToDer(sig));
-}
-
-// Signs with whatever algorithm the private key is for. Returns { alg, signature }.
+// Signs with whatever algorithm the private key is for. Returns { alg, signature } with
+// the signature base64-encoded (RSA: PKCS#1 v1.5 bytes; ECDSA: DER).
 async function signFile(fileData, privateKeyPem, hashAlgorithm) {
-    const alg = await detectPrivateKeyAlgorithm(privateKeyPem);
+    const { alg, key } = await importPrivateKey(privateKeyPem, hashAlgorithm);
     try {
-        const signature = alg === 'rsa'
-            ? signFileRSA(fileData, privateKeyPem, hashAlgorithm)
-            : await signFileECDSA(fileData, privateKeyPem, hashAlgorithm);
-        return { alg, signature };
+        if (alg === 'rsa') {
+            return { alg, signature: bytesToBase64(new Uint8Array(await crypto.subtle.sign(RSA_ALG, key, fileData))) };
+        }
+        const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: webCryptoHash(hashAlgorithm) }, key, fileData);
+        return { alg, signature: bytesToBase64(p1363ToDer(sig)) };
     } catch (error) {
         throw new Error(`Failed to sign file with ${alg.toUpperCase()}: ${error.message}`);
     }
@@ -302,37 +329,22 @@ async function signFile(fileData, privateKeyPem, hashAlgorithm) {
 // ===== Verification =====
 // A signature that can't be matched against this file + key (wrong size, malformed
 // bytes, wrong hash, wrong key) is reported as invalid rather than throwing — it is
-// not valid, regardless of why. Only an unusable public key throws.
-
-function verifySignatureRSA(fileData, signatureBase64, publicKeyPem, hashAlgorithm) {
-    const publicKey = forge.pki.publicKeyFromPem(publicKeyPem);
-    try {
-        const md = forge.md[hashAlgorithm].create();
-        md.update(forge.util.binary.raw.encode(new Uint8Array(fileData)));
-        return publicKey.verify(md.digest().bytes(), forge.util.decode64(signatureBase64));
-    } catch (_) {
-        return false;
-    }
-}
-
-async function verifySignatureECDSA(fileData, signatureBase64, publicKeyPem, hashAlgorithm) {
-    const ec = await importEcPublicKeyPem(publicKeyPem);
-    try {
-        const raw = derToP1363(base64ToBytes(signatureBase64), CURVE_BYTES[ec.namedCurve]);
-        if (!raw) return false;
-        return await crypto.subtle.verify({ name: 'ECDSA', hash: webCryptoHash(hashAlgorithm) }, ec.key, raw, fileData);
-    } catch (_) {
-        return false;
-    }
-}
+// not valid, regardless of why. Only an unusable public key or hash throws.
 
 // Verifies with whatever algorithm the public key is for. Returns { alg, valid }.
 // (Signature files made before real ECDSA existed may say "ecdsa" but hold an RSA
 // signature from an RSA key; going by the key keeps those verifiable.)
 async function verifySignature(fileData, signatureBase64, publicKeyPem, hashAlgorithm) {
-    const alg = await detectPublicKeyAlgorithm(publicKeyPem);
-    const valid = alg === 'rsa'
-        ? verifySignatureRSA(fileData, signatureBase64, publicKeyPem, hashAlgorithm)
-        : await verifySignatureECDSA(fileData, signatureBase64, publicKeyPem, hashAlgorithm);
-    return { alg, valid };
+    const { alg, key, namedCurve } = await importPublicKey(publicKeyPem, hashAlgorithm);
+    try {
+        const sig = base64ToBytes(signatureBase64);
+        if (alg === 'rsa') {
+            return { alg, valid: await crypto.subtle.verify(RSA_ALG, key, sig, fileData) };
+        }
+        const raw = derToP1363(sig, CURVE_BYTES[namedCurve]);
+        if (!raw) return { alg, valid: false };
+        return { alg, valid: await crypto.subtle.verify({ name: 'ECDSA', hash: webCryptoHash(hashAlgorithm) }, key, raw, fileData) };
+    } catch (_) {
+        return { alg, valid: false };
+    }
 }

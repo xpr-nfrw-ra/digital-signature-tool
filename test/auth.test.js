@@ -25,18 +25,32 @@ describe('register', () => {
         assert.equal(me.body.user.username, username);
     });
 
-    it('issues an HttpOnly, Secure session cookie', async () => {
+    it('issues an HttpOnly, Secure, SameSite=Strict session cookie', async () => {
         const c = client();
         const res = await c.post('/api/auth/register', { username: uniqueUsername('cookie'), password: PASSWORD });
         const cookie = res.headers['set-cookie'].find(s => s.startsWith('connect.sid='));
         assert.match(cookie, /HttpOnly/i);
         assert.match(cookie, /Secure/i);
+        assert.match(cookie, /SameSite=Strict/i);
     });
 
     it('rejects a duplicate username with 409', async () => {
         const { username } = await registeredClient('dup');
         const res = await client().post('/api/auth/register', { username, password: PASSWORD });
         assert.equal(res.status, 409);
+    });
+
+    it('treats usernames that differ only in case as the same name', async () => {
+        const { username } = await registeredClient('case');
+        const res = await client().post('/api/auth/register', { username: username.toUpperCase(), password: PASSWORD });
+        assert.equal(res.status, 409);
+    });
+
+    it('rejects new passwords longer than 72 bytes (bcrypt ignores the rest)', async () => {
+        const c = client();
+        assert.equal((await c.post('/api/auth/register', { username: uniqueUsername('long'), password: 'x'.repeat(73) })).status, 400);
+        assert.equal((await c.post('/api/auth/register', { username: uniqueUsername('long'), password: 'é'.repeat(37) })).status, 400, '74 bytes');
+        assert.equal((await c.post('/api/auth/register', { username: uniqueUsername('long'), password: 'x'.repeat(72) })).status, 200);
     });
 
     it('rejects invalid usernames and passwords with 400', async () => {
@@ -118,6 +132,14 @@ describe('sessions', () => {
         const row = await prisma.session.findFirst({ where: { userId } });
         assert.ok(row.expiresAt.getTime() > Date.now() + 60 * 60 * 1000, 'expiry should be ~2h out again');
     });
+
+    it('authenticated requests also refresh the browser cookie, not just the stored expiry', async () => {
+        const { client: c } = await registeredClient('rolling');
+        const res = await c.get('/api/settings');
+        const cookie = (res.headers['set-cookie'] || []).find(s => s.startsWith('connect.sid='));
+        assert.ok(cookie, 'expected a refreshed session cookie');
+        assert.match(cookie, /Expires=/i);
+    });
 });
 
 describe('change username', () => {
@@ -144,6 +166,24 @@ describe('change username', () => {
         assert.equal((await client().post('/api/auth/login', { username: newUsername, password: PASSWORD })).status, 200);
         assert.equal((await client().post('/api/auth/login', { username, password: PASSWORD })).status, 401);
     });
+
+    it('other logged-in devices see the new name', async () => {
+        const { client: c, username } = await registeredClient('rename');
+        const other = client();
+        await other.post('/api/auth/login', { username, password: PASSWORD });
+        const newUsername = uniqueUsername('renamed');
+        await c.put('/api/auth/username', { currentPassword: PASSWORD, newUsername });
+        assert.equal((await other.get('/api/auth/me')).body.user.username, newUsername);
+    });
+
+    it('refuses a case variant of someone else\'s name, but allows re-casing your own', async () => {
+        const { username: taken } = await registeredClient('owner');
+        const { client: c, username } = await registeredClient('rename');
+        assert.equal((await c.put('/api/auth/username', { currentPassword: PASSWORD, newUsername: taken.toUpperCase() })).status, 409);
+        const res = await c.put('/api/auth/username', { currentPassword: PASSWORD, newUsername: username.toUpperCase() });
+        assert.equal(res.status, 200);
+        assert.equal(res.body.user.username, username.toUpperCase());
+    });
 });
 
 describe('change password', () => {
@@ -169,6 +209,25 @@ describe('change password', () => {
 
         assert.equal((await client().post('/api/auth/login', { username, password: PASSWORD })).status, 401);
         assert.equal((await client().post('/api/auth/login', { username, password: NEW_PASSWORD })).status, 200);
+    });
+
+    it('logs out every other session of the user', async () => {
+        const { client: c, username, userId } = await registeredClient('pw');
+        const other = client();
+        await other.post('/api/auth/login', { username, password: PASSWORD });
+        assert.equal(await prisma.session.count({ where: { userId } }), 2);
+
+        assert.equal((await c.put('/api/auth/password', { currentPassword: PASSWORD, newPassword: NEW_PASSWORD })).status, 200);
+        assert.equal((await other.get('/api/auth/me')).status, 401);
+        assert.equal((await c.get('/api/auth/me')).status, 200);
+        assert.equal(await prisma.session.count({ where: { userId } }), 1);
+    });
+
+    it('rejects a new password longer than 72 bytes', async () => {
+        const { client: c } = await registeredClient('pw');
+        const res = await c.put('/api/auth/password', { currentPassword: PASSWORD, newPassword: 'x'.repeat(73) });
+        assert.equal(res.status, 400);
+        assert.match(res.body.error, /72 bytes/);
     });
 });
 

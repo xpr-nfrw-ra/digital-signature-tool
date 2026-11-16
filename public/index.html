@@ -6,7 +6,6 @@
     <title>Digital Signature Tool</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="css/styles.css">
-    <script src="lib/forge.min.js"></script>
 </head>
 <body>
     <!-- Login Page -->
@@ -296,13 +295,13 @@
                 <div class="modal-info">
                     <strong>Current Settings:</strong><br>
                     Algorithm: <span id="modalAlgorithm">RSA</span> | 
-                    Key Size: <span id="modalKeySize">2048</span> bits | 
+                    Key Size: <span id="modalKeySize">2048 bits</span> |
                     Hash: <span id="modalHash">SHA-256</span>
                 </div>
 
                 <div class="modal-input-group">
-                    <label>Key Name</label>
-                    <input type="text" id="keyName" placeholder="e.g., my-signature-key">
+                    <label for="keyName">Key Name</label>
+                    <input type="text" id="keyName" placeholder="e.g., my-signature-key" maxlength="64">
                 </div>
 
                 <div class="progress" id="keygenProgress">Generating keys... This may take a moment.</div>

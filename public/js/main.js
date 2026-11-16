@@ -203,18 +203,27 @@ function renderMyKeys(keys, preferredId) {
     });
 }
 
+// Each load gets a number; a response that arrives after a newer load started (or after
+// logout) is dropped, so lists never show stale or duplicated data.
+let keysRequest = 0;
+let historyRequest = 0;
+
 async function loadMyKeys() {
     if (!myKeysList) return;
+    const request = ++keysRequest;
     try {
         const res = await fetch('/api/keys/mine');
+        if (request !== keysRequest) return;
         if (!res.ok) {
             myKeysStatus.textContent = 'Log in to manage your preferred signing key.';
             myKeysList.innerHTML = '';
             return;
         }
         const { keys } = await res.json();
+        if (request !== keysRequest) return;
         renderMyKeys(keys, appSettings.defaultPublicKeyId ?? null);
     } catch (e) {
+        if (request !== keysRequest) return;
         myKeysStatus.textContent = 'Could not load your keys.';
         myKeysList.innerHTML = '';
     }
@@ -256,26 +265,30 @@ function setHistoryStatus(text) {
 // Loads the first page (reset) or the next page of the caller's signing history.
 async function loadSigningHistory(reset = true) {
     if (reset) {
+        historyRequest++;
         historyCursor = null;
         historyList.replaceChildren();
         historyMore.style.display = 'none';
         setHistoryStatus('Loading your history…');
     }
+    const request = historyRequest;
     historyMore.disabled = true;
     try {
         const qs = `limit=${HISTORY_PAGE_SIZE}` + (historyCursor ? `&cursor=${historyCursor}` : '');
         const res = await fetch('/api/signatures/mine?' + qs);
+        if (request !== historyRequest) return;
         if (!res.ok) {
             setHistoryStatus('Log in to see your signing history.');
             return;
         }
         const { entries, nextCursor } = await res.json();
+        if (request !== historyRequest) return;
         entries.forEach(e => historyList.appendChild(historyItem(e)));
         historyCursor = nextCursor;
         historyMore.style.display = nextCursor ? 'inline-block' : 'none';
         setHistoryStatus(historyList.children.length ? '' : 'You haven\'t signed any files while logged in yet.');
     } catch (e) {
-        setHistoryStatus('Could not load your signing history.');
+        if (request === historyRequest) setHistoryStatus('Could not load your signing history.');
     } finally {
         historyMore.disabled = false;
     }
@@ -295,10 +308,25 @@ navItems.forEach(item => {
 
 window.loadMyKeys = loadMyKeys;
 
-// Clears the account inputs and messages and closes any open account dialog on logout.
+// On logout: closes any account dialog, clears the account message, wipes the previous
+// user's keys and signing history from the Settings page, and returns to File Signing,
+// so the next user (or a guest) never sees the previous user's data.
 window.resetAccountForms = function() {
     closeAccountModal();
     setAccountMessage('accountMessage', '', false);
+
+    keysRequest++;
+    myKeysList.replaceChildren();
+    myKeysStatus.textContent = 'Loading your keys…';
+    myKeysStatus.style.display = 'block';
+
+    historyRequest++;
+    historyCursor = null;
+    historyList.replaceChildren();
+    historyMore.style.display = 'none';
+    setHistoryStatus('Loading your history…');
+
+    document.querySelector('.nav-item[data-section="signing"]').click();
 };
 
 // ===== ACCOUNT (change username / change password / delete account) =====

@@ -59,9 +59,10 @@ No running app or certificates needed. See [Running tests](#running-tests).
 ## Features
 
 - **File Signing** — sign any file with an RSA or ECDSA private key (client-side; logged to your audit history when signed in). The algorithm is taken from the key itself. The `.sig` file is a self-describing JSON envelope `{ v, alg, hash, sig }`, so verifiers don't need to match the signer's settings.
-- **Signature Verification** — verify a file against a public key, either uploaded or looked up server-side. RSA or ECDSA is detected from the public key; the hash is auto-filled (and locked) from the `.sig` envelope, and for legacy raw-base64 signatures the user picks it for that single verification without touching their saved settings.
-- **Key Generation** — generate RSA (2048 / 3072 / 4096 bits) or ECDSA (P-256 / P-384 / P-521) key pairs; the public half is auto-registered for logged-in users
-- **Standard formats** — keys are PEM (PKCS#1/PKCS#8 private, SPKI public); RSA signatures are PKCS#1 v1.5 and ECDSA signatures are DER, so both verify with OpenSSL, e.g. `openssl dgst -sha256 -verify pub.pem -signature sig.bin file` after base64-decoding the `sig` field. RSA uses forge.js; ECDSA uses the browser's Web Crypto API.
+- **Signature Verification** — verify a file against a public key, either uploaded or looked up server-side (choosing one replaces the other, so the key used is always the one shown). RSA or ECDSA is detected from the public key; the hash is auto-filled (and locked) from the `.sig` envelope, and for legacy raw-base64 signatures the user picks it for that single verification without touching their saved settings.
+- **Key Generation** — generate RSA (2048 / 3072 / 4096 bits) or ECDSA (P-256 / P-384 / P-521) key pairs; the new private key is selected for signing straight away, and the public half is auto-registered for logged-in users
+- **Standard formats** — generated keys are PKCS#8 (private) and SPKI (public) PEM. For signing, PKCS#8, PKCS#1 (`RSA PRIVATE KEY`) and SEC1 (`EC PRIVATE KEY`) private keys are accepted; for verifying, SPKI and PKCS#1 (`RSA PUBLIC KEY`). RSA signatures are PKCS#1 v1.5 and ECDSA signatures are DER, so both verify with OpenSSL, e.g. `openssl dgst -sha256 -verify pub.pem -signature sig.bin file` after base64-decoding the `sig` field. All cryptography uses the browser's built-in Web Crypto API (no third-party crypto library), which also hashes large files natively.
+- **Accepted public keys** — the server registers only keys the app can use: RSA of at least 2048 bits with public exponent 65537, or ECDSA on P-256, P-384 or P-521.
 - **Public Key Directory** — a user can register multiple public keys; verifiers look them up by exact username (returns all of that user's keys) or by fingerprint (returns the single matching key).
 - **Signing History** — Settings → "Signing History" lists the files you signed while logged in (name, time, key, hash algorithm), 20 at a time with "Load more".
 - **Who signed this file?** — on the verify page, picking a file looks it up in the signing log under all three hash algorithms and lists every recorded signer (deleted accounts shown as such). After a valid verification, the signer whose key you just verified with is highlighted. Logged-in users only.
@@ -146,11 +147,10 @@ Uses Node's built-in test runner with [Supertest](https://github.com/ladjs/super
 
 ```text
 digital-signature-tool/
-├── public/                  # Client-side files (HTML, CSS, JS, forge.js)
+├── public/                  # Client-side files (HTML, CSS, JS)
 │   ├── index.html
 │   ├── css/
-│   ├── js/                  # auth.js, main.js, crypto.js, signing.js, verification.js
-│   └── lib/                 # forge.min.js
+│   └── js/                  # auth.js, main.js, crypto.js, signing.js, verification.js
 ├── prisma/
 │   ├── schema.prisma        # Database schema (users, sessions, signature_log, public_keys, user_settings)
 │   └── migrations/          # SQL migration history
@@ -202,8 +202,8 @@ SQLite via Prisma ORM. [prisma/schema.prisma](prisma/schema.prisma) is the sourc
 
 | Table | Holds | Notes |
 |---|---|---|
-| `users` | `username` (unique), `password_hash` (bcrypt, 10 rounds), `created_at`, `deleted_at` (null unless deleted) | No role column — every user is equal. |
-| `sessions` | express-session rows: `id` (= `connect.sid`), `user_id`, `session_data` (JSON), `expires_at` (indexed), `created_at` | A row appears only on login/register (`saveUninitialized: false`). 2-hour sliding idle timeout, refreshed on every authenticated request; expired rows are purged at startup and lazily on read. Deleted on logout. No IP/user-agent stored. |
+| `users` | `username` (unique), `password_hash` (bcrypt, 10 rounds), `created_at`, `deleted_at` (null unless deleted) | No role column — every user is equal. Usernames are also unique regardless of case (checked in `server/auth.js`), so `Alice` can't be registered next to `alice`; the spelling is kept as typed. |
+| `sessions` | express-session rows: `id` (= `connect.sid`), `user_id`, `session_data` (JSON), `expires_at` (indexed), `created_at` | A row appears only on login/register (`saveUninitialized: false`). 2-hour sliding idle timeout: every authenticated request moves `expires_at` and re-sends the cookie (`rolling: true`). Expired rows are purged at startup and lazily on read. Deleted on logout; a password change deletes all of the user's other sessions. No IP/user-agent stored. |
 | `public_keys` | `fingerprint` (unique, SHA-256 of DER SPKI), `public_key_pem`, `label`, `user_id` | A user may have many keys; all are returned by username lookup. |
 | `signature_log` | `user_id` (indexed), `public_key_id`, `document_name`, `document_hash` (indexed), `signed_at` | Evidence of a signing event. The signing itself happens in the browser. |
 | `user_settings` | `hash_algorithm`, `signature_algorithm`, `key_size`, `default_public_key_id` | 1-to-1 with `users`; defaults inserted on registration. `key_size` is 2048/3072/4096; for ECDSA these mean P-256/P-384/P-521. The default key is only a bookmark — it doesn't restrict lookups. |
@@ -227,13 +227,13 @@ SQLite via Prisma ORM. [prisma/schema.prisma](prisma/schema.prisma) is the sourc
 
 In public lookups (`/keys/by-fingerprint`, `/signatures/by-hash`) a deleted owner appears as `username: null, accountDeleted: true` — the placeholder name is never shown, and a new user who takes the old name inherits nothing. `/keys/by-username` treats a deleted account like an unknown username (empty list), including when queried by its placeholder name. A deleted user's key can't be registered by anyone else.
 
-**Field rules.** SQLite enforces only types, `NOT NULL`, `UNIQUE` and foreign keys — it ignores `VARCHAR(n)` and has no regex. Length and format rules (username 3–32 chars of `[a-zA-Z0-9_.-]`, new passwords 8–128 chars — passwords being checked at login or re-confirmation only need to be non-empty, so accounts created under the old 6-character minimum still work — document hash exactly 64/96/128 hex chars, fingerprint 64 hex, PEM shape, label 1–64 chars, …) live in the `LIMITS` object in [server/validators.js](server/validators.js), which every write route calls before touching the database.
+**Field rules.** SQLite enforces only types, `NOT NULL`, `UNIQUE` and foreign keys — it ignores `VARCHAR(n)` and has no regex. Length and format rules (username 3–32 chars of `[a-zA-Z0-9_.-]`, new passwords 8 characters to 72 bytes — bcrypt ignores everything after the first 72 bytes; passwords being checked at login or re-confirmation only need to be non-empty (up to 128 characters), so accounts created under the old 6-character minimum or 128-character maximum still work — document hash exactly 64/96/128 hex chars, fingerprint 64 hex, PEM shape, label 1–64 chars, …) live in the `LIMITS` object in [server/validators.js](server/validators.js), which every write route calls before touching the database.
 
 **Changing the schema.** Edit `prisma/schema.prisma`, run `npx prisma migrate dev --name <description>`, then `npx prisma generate` (Prisma 7 no longer regenerates the client during `migrate dev`; `npm test` does it for you), and commit the generated folder under `prisma/migrations/`. Inspect data with `npx prisma studio` or `sqlite3 dev.db`. Application code must go through Prisma (or the parameterized `prisma.$queryRaw`), never hand-built SQL.
 
 ## Access control
 
-- **Authentication:** username + password → `bcrypt.compare` → `req.session.regenerate()` (new session ID, prevents fixation) → `req.session.user = { id, username }`. Password change also rotates the session ID.
+- **Authentication:** username + password → `bcrypt.compare` → `req.session.regenerate()` (new session ID, prevents fixation) → `req.session.user = { id, username }`. Password change logs out all other sessions and rotates this one's ID. `GET /auth/me` reads the user from the database, so a rename on one device shows on the others.
 - **Gate:** `requireAuth` in [server/middleware.js](server/middleware.js) returns 401 for every route except register, login, logout and `me` (which returns its own 401 when there's no session).
 - **Ownership:** handlers that touch a row check `row.userId === req.session.user.id` (deleting a key, logging a signature with a key, setting the default key); "mine" routes query by the session user's id.
 - **Public lookups:** `/keys/by-username/:u` and `/keys/by-fingerprint/:fp` deliberately return other users' public keys (they're not secret; verification needs them), and `/signatures/by-hash/:hash` returns who signed a given document. Exact match only — there is no list-all endpoint, so you must already know the username, fingerprint or file.
@@ -253,7 +253,8 @@ Look for `Verify return code: 0 (ok)` to confirm the chain validates correctly.
 - A strict Content Security Policy (helmet, in `server/app.js`) allows scripts, styles and fonts only from the app's own origin — no inline scripts, event-handler attributes or `style=""` attributes, no framing — so injected markup can't run code next to your private keys. Keep new UI code free of inline scripts/styles; `test/security-headers.test.js` checks both the header and the page.
 - Passwords are hashed with bcrypt before storage.
 - Password-checking endpoints are rate limited: login and register per IP, username/password change per user (only wrong-password attempts count). Limited requests get `429` with a `Retry-After` header.
-- Sessions are persisted in SQLite via a Prisma-backed `express-session` store and survive server restarts. Cookies are HTTP-only and secure (HTTPS-only).
+- Sessions are persisted in SQLite via a Prisma-backed `express-session` store and survive server restarts. Cookies are HTTP-only, secure (HTTPS-only) and `SameSite=Strict`.
+- API errors are short JSON messages (`{ error }`); malformed or oversized request bodies and unknown `/api` routes never return a stack trace or HTML.
 - User data is stored in a local SQLite database (`dev.db`). The server stores only public keys, signing-event records, user credentials (bcrypt hashes), session blobs, and user settings — never private keys.
 - Public-key lookup is targeted: callers must supply an exact username or full fingerprint. There is no browse/list-all endpoint, which limits passive enumeration.
 - Input length caps for usernames, labels, hashes, etc. are enforced at the API boundary in `server/validators.js` (SQLite does not enforce VARCHAR length itself).
@@ -261,5 +262,5 @@ Look for `Verify return code: 0 (ok)` to confirm the chain validates correctly.
 
 **Known gaps** (tracked in [ROADMAP.md](ROADMAP.md)):
 
-- Anyone holding a session cookie is that user — there is no device binding or "log out other sessions".
+- Anyone holding a session cookie is that user — there is no device binding and no "log out other sessions" button (changing the password does log them all out).
 - Rate-limit counters are in memory and per IP; an attacker spread over many IPs can still guess one account's password slowly.

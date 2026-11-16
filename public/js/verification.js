@@ -54,7 +54,11 @@ async function onSignatureFilePicked() {
     try {
         const text = await readFileAsText(file);
         const parsed = parseSignatureFile(text);
-        if (parsed.alg && parsed.hash) {
+        if (parsed.hash && !WEBCRYPTO_HASH[parsed.hash]) {
+            verifyHashSelect.disabled = false;
+            verifyAlgoNote.textContent = `This signature file names a hash this app does not support ("${parsed.hash}"). Only SHA-256, SHA-384 and SHA-512 are supported.`;
+            verifyAlgoNote.className = 'verify-algo-note legacy';
+        } else if (parsed.alg && parsed.hash) {
             verifyHashSelect.value = parsed.hash;
             verifyHashSelect.disabled = true;
             verifyAlgoNote.textContent = `Auto-detected from signature file: ${parsed.alg.toUpperCase()} with ${WEBCRYPTO_HASH[parsed.hash] || parsed.hash.toUpperCase()}.`;
@@ -72,6 +76,32 @@ async function onSignatureFilePicked() {
 }
 
 signatureFileInput.addEventListener('change', onSignatureFilePicked);
+
+// ===== Which public key? =====
+// There are two ways to supply the key: a file, or a stored key picked from a lookup.
+// Choosing one clears the other, so the key that gets used is always the one on screen.
+const publicKeyInput = document.getElementById('publicKey');
+const PUBLIC_KEY_PLACEHOLDER = 'Choose the public key file...';
+
+// Unselects the looked-up key but keeps the list, so it can be picked again.
+function clearLookedUpKey() {
+    if (!lookedUpPublicKeyPem) return;
+    lookedUpPublicKeyPem = null;
+    lookupResult.querySelectorAll('li.selected').forEach(li => li.classList.remove('selected'));
+    const status = lookupResult.querySelector('.lookup-selected');
+    if (status) status.remove();
+}
+
+function clearPublicKeyFile() {
+    publicKeyInput.value = '';
+    const text = document.querySelector('#publicKeyWrapper .file-text');
+    text.textContent = PUBLIC_KEY_PLACEHOLDER;
+    text.classList.remove('selected-file');
+}
+
+publicKeyInput.addEventListener('change', () => {
+    if (publicKeyInput.files[0]) clearLookedUpKey();
+});
 
 // ===== Who signed this file? =====
 // Looks the picked file up in the signing audit log. The log stores each document's
@@ -229,7 +259,11 @@ function renderKeyChoices(keys) {
             ul.querySelectorAll('li').forEach(el => el.classList.remove('selected'));
             li.classList.add('selected');
             lookedUpPublicKeyPem = k.publicKeyPem;
-            setLookupMessage(`Selected key "${k.label}" (${shortFp(k.fingerprint)}). Click Verify to use it.`, 'ok');
+            clearPublicKeyFile();
+            const status = lookupResult.querySelector('.lookup-selected') || document.createElement('div');
+            status.className = 'lookup-selected';
+            status.textContent = `Selected key "${k.label}" (${shortFp(k.fingerprint)}). Click Verify to use it.`;
+            lookupResult.appendChild(status);
         });
         ul.appendChild(li);
     });
@@ -293,7 +327,7 @@ verifyButton.addEventListener('click', async () => {
         // Read all files
         const fileData = await readFileAsArrayBuffer(fileInput.files[0]);
         const sigFileText = await readFileAsText(sigInput.files[0]);
-        // Prefer the looked-up key over the file input if the user picked one.
+        // Only one of the two is ever set (choosing one clears the other).
         const publicKeyPem = lookedUpPublicKeyPem || await readFileAsText(pubKeyInput.files[0]);
 
         // Parse the signature envelope to get the raw signature bytes. The hash

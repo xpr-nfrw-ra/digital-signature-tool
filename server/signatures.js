@@ -17,7 +17,8 @@ router.post('/', requireAuth, async (req, res) => {
         const fp = String(publicKeyFingerprint).trim().toLowerCase();
         const publicKey = await prisma.publicKey.findUnique({ where: { fingerprint: fp } });
         if (!publicKey) {
-            return res.status(400).json({ error: 'Public key not registered. Generate or upload it first.' });
+            // Keys generated outside the app, or while signed out, were never registered.
+            return res.status(400).json({ error: 'this key is not registered to your account (only keys generated here while logged in are)' });
         }
         if (publicKey.userId !== req.session.user.id) {
             return res.status(403).json({ error: 'This key does not belong to the current user' });
