@@ -40,10 +40,38 @@ async function start() {
         ca: fs.readFileSync(chainPath)
     };
 
-    https.createServer(sslOptions, app).listen(PORT, () => {
+    server = https.createServer(sslOptions, app).listen(PORT, () => {
         console.log(`HTTPS server running on https://localhost:${PORT}`);
     });
 }
+
+// Graceful shutdown on Ctrl+C (SIGINT) or a stop request from another tool (SIGTERM):
+// refuse new requests, let in-flight ones finish, close the database, then exit.
+let server;
+let shuttingDown = false;
+
+function shutdown() {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log('Shutting down...');
+
+    // Never hang: if something is still busy after 5 seconds, exit anyway.
+    setTimeout(() => {
+        console.error('Shutdown timed out; exiting.');
+        process.exit(1);
+    }, 5000).unref();
+
+    const closeDb = async () => {
+        await userStore.prisma.$disconnect();
+        console.log('Server stopped.');
+        process.exit(0);
+    };
+    if (server) server.close(closeDb);
+    else closeDb();
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 start().catch(err => {
     console.error('Failed to start server:', err);
