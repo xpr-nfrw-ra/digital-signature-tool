@@ -129,6 +129,7 @@ digital-signature-tool/
 ├── scripts/
 │   ├── setup.js             # npm run setup — first-time setup
 │   ├── preflight.js         # Runs before npm start / dev: checks setup, applies migrations
+│   ├── studio.js            # npm run db — opens Prisma Studio on port 5555
 │   ├── gen-ca-chain.sh      # OpenSSL PKI generation script
 │   └── prepare-test-db.js   # Builds the migrated template DB for tests
 ├── server/                  # Node.js/Express backend

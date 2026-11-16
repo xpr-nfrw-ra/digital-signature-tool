@@ -9,7 +9,7 @@
     "start": "node server/server.js",
     "predev": "node scripts/preflight.js",
     "dev": "node --watch server/server.js",
-    "db": "prisma studio",
+    "db": "node scripts/studio.js",
     "test": "node scripts/prepare-test-db.js && node --test \"test/**/*.test.js\"",
     "generate-ca-chain": "bash scripts/gen-ca-chain.sh",
     "postinstall": "prisma generate"
