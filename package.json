@@ -28,5 +28,8 @@
   "devDependencies": {
     "prisma": "^7.10.1",
     "supertest": "^7.3.1"
+  },
+  "overrides": {
+    "effect": "3.22.5"
   }
 }

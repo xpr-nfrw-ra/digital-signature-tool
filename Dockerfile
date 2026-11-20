@@ -5,7 +5,7 @@
 # No secrets are baked into the image: the session secret, the SQLite database and the
 # HTTPS certificate chain are created on first start inside the /app/data volume.
 
-FROM node:22-bookworm-slim
+FROM node:24-bookworm-slim
 
 # openssl: generates the CA chain (scripts/gen-ca-chain.sh); bash runs that script.
 RUN apt-get update \

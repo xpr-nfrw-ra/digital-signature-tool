@@ -146,6 +146,19 @@ docker run -d --name signtool -p 3443:3443 -v signtool-data:/app/data signtool:1
 
 Open **https://localhost:3443**. Stop with `docker stop signtool`, start again with `docker start signtool`.
 
+**From Docker Desktop instead:** *Images* → `signtool:1.0` → **Run** → open **Optional settings** and fill in:
+
+| Field | Value |
+|---|---|
+| Container name | `signtool` |
+| Host port | `3443` |
+| Volumes: Host path | `signtool-data` (a volume name; a folder such as `C:\signtool-data` also works) |
+| Volumes: Container path | `/app/data` |
+
+Left empty, the host port becomes a random one and each container gets its own unnamed volume, so every new container starts with a new CA and an empty database.
+
+Docker Desktop's port link opens `http://`. The server answers plain HTTP on its port with a redirect to `https://`, so the link works; only the address bar's scheme changes.
+
 On first start, [docker-entrypoint.sh](docker-entrypoint.sh) does what `npm run setup` does: it creates a random `SESSION_SECRET`, the certificate chain and the database, all inside the `signtool-data` volume. Nothing secret is built into the image (see [.dockerignore](.dockerignore)): your local `.env`, `certs/` and `dev.db` are not used, and every volume has its own CA and data. To pass your own secret instead, add `-e SESSION_SECRET=...` to `docker run`.
 
 To trust the container's certificate, copy its Root CA out and import it as in [Trust the certificate](#trust-the-certificate):

@@ -7,6 +7,7 @@ if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
 }
 
 const https = require('https');
+const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { app } = require('./app');
@@ -40,9 +41,54 @@ async function start() {
         ca: fs.readFileSync(chainPath)
     };
 
-    server = https.createServer(sslOptions, app).listen(PORT, () => {
+    server = https.createServer(sslOptions, app);
+    acceptPlainHttpRedirects(server);
+    server.listen(PORT, () => {
         console.log(`HTTPS server running on https://localhost:${PORT}`);
     });
+}
+
+// One port, two protocols: a TLS connection starts with a handshake record (first byte
+// 0x16); anything else is plain HTTP and only gets a redirect to https://. This matters
+// when a link opens http:// by default, e.g. Docker Desktop's port links.
+// The HTTPS server still listens on the port itself, so Node's connection tracking
+// (header/request timeouts, closing idle connections on shutdown) keeps working.
+function acceptPlainHttpRedirects(httpsServer) {
+    const [tlsConnectionListener] = httpsServer.listeners('connection');
+    if (!tlsConnectionListener) throw new Error('HTTPS server has no connection listener');
+    httpsServer.removeListener('connection', tlsConnectionListener);
+
+    const redirectServer = http.createServer(redirectToHttps);
+    redirectServer.timeout = 10000; // plain-HTTP sockets that stall are dropped
+
+    httpsServer.on('connection', socket => {
+        // Wait for the first bytes; drop connections that never send anything.
+        socket.setTimeout(10000, () => socket.destroy());
+        socket.once('data', chunk => {
+            socket.setTimeout(0);
+            socket.pause();
+            socket.unshift(chunk);
+            if (chunk[0] === 0x16) tlsConnectionListener.call(httpsServer, socket);
+            else redirectServer.emit('connection', socket);
+            process.nextTick(() => socket.resume());
+        });
+    });
+}
+
+// Host names the certificate covers. The port is kept as the browser sent it, so the
+// redirect also works when Docker maps the app to a different host port.
+const CERT_HOSTS = new Set(['localhost', 'signtool.local', '127.0.0.1']);
+
+function redirectToHttps(req, res) {
+    let target = `localhost:${PORT}`;
+    try {
+        const url = new URL(`http://${req.headers.host}`);
+        if (CERT_HOSTS.has(url.hostname)) target = url.host;
+    } catch {
+        // Missing or malformed Host header: fall back to localhost.
+    }
+    res.writeHead(301, { Location: `https://${target}${req.url}`, Connection: 'close' });
+    res.end();
 }
 
 // Graceful shutdown on Ctrl+C (SIGINT) or a stop request from another tool (SIGTERM):
