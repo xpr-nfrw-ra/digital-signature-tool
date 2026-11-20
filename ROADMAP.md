@@ -20,6 +20,7 @@ What's left, what still needs deciding, and why things are the way they are. [RE
 - [x] Real ECDSA (P-256 / P-384 / P-521) via the Web Crypto API, alongside RSA
 - [x] Minimum length for new passwords raised from 6 to 8; existing shorter passwords still log in
 - [x] Frontend: Signing History card (paged) and "Who signed this file?" on the verify page
+- [x] Docker image as an alternative way to run the app (`Dockerfile`, `docker-entrypoint.sh`); still uses the local CA, so it is not the production deployment below
 
 ### Next, in order
 1. [ ] **Production deployment** — once there is a target server. See the plan below.
@@ -41,6 +42,8 @@ No open decisions right now.
 - **ECDSA implemented, not removed (D3, 2026-10-29).** Uses the browser's Web Crypto API (forge.js had no ECDSA; RSA later moved to Web Crypto too). The existing 2048/3072/4096 key-size setting maps to P-256/P-384/P-521, so no schema change. Keys are PKCS#8/SPKI PEM and signatures DER, so they interoperate with OpenSSL and the server's fingerprinting.
 - **The key decides the algorithm.** Signing and verification detect RSA vs ECDSA from the key, not from settings or the `.sig` label. A key can't be used with the wrong algorithm, and signatures made before real ECDSA existed (labelled "ecdsa" but RSA inside) still verify.
 - **npm scripts are the way to run the project.** `npm run setup`, `npm run dev`, `npm start`, `npm run db`, `npm test` work on any OS. The Windows `setup.bat` / `start.bat` double-click wrappers were removed (2026-11-16) so there is one way to run it. `start` and `dev` run `scripts/preflight.js` first, which explains what is missing if setup was skipped and applies new migrations, so a `git pull` never leaves the database behind the code.
+- **The local CAs are name-constrained (2026-11-20).** Root and Intermediate carry a critical `nameConstraints` extension permitting only `localhost`, `signtool.local` and `127.0.0.1`, so a leaked `rootCA.key` or `intermediate.key` can't be used to impersonate other websites on a machine that trusts the Root CA. Constraining only the Intermediate was not enough, because the root key could sign a new unconstrained intermediate. A new SAN in `scripts/gen-ca-chain.sh` must be added to `NAME_CONSTRAINTS` too, or the server certificate fails verification.
+- **Docker is a supported alternative, npm stays primary (2026-11-20).** Running the app as a container became a requirement, so the "one way to run it" rule above now has this one exception. The image contains no secrets: `docker-entrypoint.sh` creates `SESSION_SECRET`, the CA chain and the database in the `/app/data` volume on first start, so a shared image never carries anyone's keys or data. The entrypoint repeats the secret and migration steps of `scripts/setup.js` / `scripts/preflight.js` (preflight expects a `.env` file, which the container doesn't have); change both together.
 - **No list-all public keys endpoint.** Lookup needs an exact username or fingerprint, which limits passive enumeration.
 - **No per-username login lockout.** It would let anyone lock a victim out. Rate limits are per IP (login, register) and per user (re-auth routes), and only wrong-password (401) responses count.
 - **Rate-limit counters in memory.** Fine for a single instance; they reset on restart. Revisit if the app runs on multiple processes.

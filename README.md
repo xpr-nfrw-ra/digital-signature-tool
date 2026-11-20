@@ -102,7 +102,9 @@ Click **Yes** when Windows asks to confirm. (Or by hand: `Win + R` → `certmgr.
 
 Restart the browser afterwards. If you ever delete `certs/` and run setup again, a new authority is created and you need to import the new `rootCA.crt`.
 
-> Keep `certs/rootCA.key` private: while the authority is trusted, anyone with that file could create certificates your computer accepts for any website. It never leaves your machine (`certs/` is gitignored). Remove the authority again in `certmgr.msc` when you stop working on the project.
+> Keep `certs/rootCA.key` private: while the authority is trusted, anyone with that file could create certificates your computer accepts for `localhost`, `signtool.local` (and their subdomains) and `127.0.0.1`. The CAs carry a name constraint, so certificates they sign for any other website are rejected. The key never leaves your machine (`certs/` is gitignored). Remove the authority again in `certmgr.msc` when you stop working on the project.
+>
+> Certificates made before 2026-11-20 have no name constraint. If your `certs/rootCA.crt` is older, remove the old authority in `certmgr.msc`, delete `certs/`, run `npm run setup` and import the new `rootCA.crt`.
 
 ### Troubleshooting
 
@@ -128,10 +130,38 @@ All of these stay on your machine and are gitignored.
 
 | Certificate file | Description |
 |------|-------------|
-| `rootCA.key` / `rootCA.crt` | Root CA — self-signed, 10-year validity |
+| `rootCA.key` / `rootCA.crt` | Root CA — self-signed, 10-year validity, name-constrained to the server certificate's names |
 | `intermediate.key` / `intermediate.crt` | Intermediate CA — signed by Root, 5 years |
 | `server.key` / `server.crt` | Server certificate for `localhost`, `signtool.local`, `127.0.0.1` — signed by Intermediate, 1 year |
 | `chain.crt` | Intermediate + Root bundle sent during the TLS handshake |
+
+## Run with Docker
+
+The npm commands above are the main way to run the project. Docker is an alternative that needs no Node.js, Git Bash or `npm run setup`, only [Docker](https://www.docker.com/).
+
+```bash
+docker build -t signtool:1.0 .
+docker run -d --name signtool -p 3443:3443 -v signtool-data:/app/data signtool:1.0
+```
+
+Open **https://localhost:3443**. Stop with `docker stop signtool`, start again with `docker start signtool`.
+
+On first start, [docker-entrypoint.sh](docker-entrypoint.sh) does what `npm run setup` does: it creates a random `SESSION_SECRET`, the certificate chain and the database, all inside the `signtool-data` volume. Nothing secret is built into the image (see [.dockerignore](.dockerignore)): your local `.env`, `certs/` and `dev.db` are not used, and every volume has its own CA and data. To pass your own secret instead, add `-e SESSION_SECRET=...` to `docker run`.
+
+To trust the container's certificate, copy its Root CA out and import it as in [Trust the certificate](#trust-the-certificate):
+
+```powershell
+docker cp signtool:/app/certs/rootCA.crt .
+Import-Certificate -FilePath .\rootCA.crt -CertStoreLocation Cert:\CurrentUser\Root
+```
+
+| Task | Command |
+|---|---|
+| See the logs | `docker logs signtool` |
+| Rebuild after code changes | `docker rm -f signtool`, then the build and run commands above (data stays in the volume; migrations apply on start) |
+| Start over with an empty database and a new CA | `docker rm -f signtool && docker volume rm signtool-data` — **deletes all data** |
+| Export the image to a file | `docker save signtool:1.0 \| gzip > signtool-1.0.tar.gz` (Git Bash) |
+| Load an exported image | `docker load -i signtool-1.0.tar.gz` |
 
 ## Running tests
 
@@ -176,6 +206,9 @@ digital-signature-tool/
 ├── certs/                   # Generated certificates — gitignored
 ├── .env.example             # Template for .env (DATABASE_URL, SESSION_SECRET)
 ├── .vscode/launch.json      # VS Code debug configurations (F5)
+├── Dockerfile               # Container image (see "Run with Docker")
+├── docker-entrypoint.sh     # Container start-up: secret, certs, migrations, then the server
+├── .dockerignore            # Keeps .env, certs/, dev.db and node_modules out of the image
 ├── ROADMAP.md               # Remaining work, open decisions, decision log
 └── package.json
 ```

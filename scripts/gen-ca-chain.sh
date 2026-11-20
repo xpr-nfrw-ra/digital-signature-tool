@@ -15,55 +15,69 @@ CERTS_DIR="$SCRIPT_DIR/../certs"
 
 mkdir -p "$CERTS_DIR"
 
+# Work inside certs/ and give openssl plain file names only. On Windows, PATH may find
+# a native openssl.exe (e.g. Git's mingw64 build) that can't read Git Bash paths like
+# /c/Users/..., and path conversion is off (see above). Relative names work for every
+# openssl build on every platform.
+cd "$CERTS_DIR"
+
 # Abort if chain already exists
-if [ -f "$CERTS_DIR/server.crt" ] && [ -f "$CERTS_DIR/server.key" ]; then
+if [ -f server.crt ] && [ -f server.key ]; then
     echo "Certificate chain already exists in certs/. Delete certs/ to regenerate."
     exit 0
 fi
 
+# Both CAs may only vouch for these names (and subdomains of the DNS names). Without
+# this, a trusted Root CA could sign certificates for any website, so anyone who got
+# hold of rootCA.key or intermediate.key could impersonate e.g. a bank on this machine.
+# Must cover every SAN of the server certificate below.
+NAME_CONSTRAINTS="critical, permitted;DNS:localhost, permitted;DNS:signtool.local, permitted;IP:127.0.0.1/255.255.255.255"
+
 echo "=== 1/4  Root CA ==="
-openssl genrsa -out "$CERTS_DIR/rootCA.key" 4096
+openssl genrsa -out rootCA.key 4096
 openssl req -x509 -new -nodes \
-    -key "$CERTS_DIR/rootCA.key" \
+    -key rootCA.key \
     -sha256 -days 3650 \
     -subj "/C=US/ST=Dev/O=Digital Signature Tool/CN=Root CA" \
-    -out "$CERTS_DIR/rootCA.crt"
+    -addext "nameConstraints = $NAME_CONSTRAINTS" \
+    -out rootCA.crt
 
 echo "=== 2/4  Intermediate CA ==="
-openssl genrsa -out "$CERTS_DIR/intermediate.key" 4096
+openssl genrsa -out intermediate.key 4096
 openssl req -new \
-    -key "$CERTS_DIR/intermediate.key" \
+    -key intermediate.key \
     -subj "/C=US/ST=Dev/O=Digital Signature Tool/CN=Intermediate CA" \
-    -out "$CERTS_DIR/intermediate.csr"
+    -out intermediate.csr
 
 # Intermediate CA extensions: allow it to sign certificates
-cat > "$CERTS_DIR/intermediate_ext.cnf" <<INTEOF
+cat > intermediate_ext.cnf <<INTEOF
 [v3_intermediate_ca]
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid:always,issuer
 basicConstraints = critical, CA:true, pathlen:0
 keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+nameConstraints = $NAME_CONSTRAINTS
 INTEOF
 
 openssl x509 -req \
-    -in "$CERTS_DIR/intermediate.csr" \
-    -CA "$CERTS_DIR/rootCA.crt" \
-    -CAkey "$CERTS_DIR/rootCA.key" \
+    -in intermediate.csr \
+    -CA rootCA.crt \
+    -CAkey rootCA.key \
     -CAcreateserial \
     -sha256 -days 1825 \
-    -extfile "$CERTS_DIR/intermediate_ext.cnf" \
+    -extfile intermediate_ext.cnf \
     -extensions v3_intermediate_ca \
-    -out "$CERTS_DIR/intermediate.crt"
+    -out intermediate.crt
 
 echo "=== 3/4  Server certificate ==="
-openssl genrsa -out "$CERTS_DIR/server.key" 2048
+openssl genrsa -out server.key 2048
 openssl req -new \
-    -key "$CERTS_DIR/server.key" \
+    -key server.key \
     -subj "/C=US/ST=Dev/O=Digital Signature Tool/CN=localhost" \
-    -out "$CERTS_DIR/server.csr"
+    -out server.csr
 
 # Server cert extensions: SANs for localhost and 127.0.0.1
-cat > "$CERTS_DIR/server_ext.cnf" <<SRVEOF
+cat > server_ext.cnf <<SRVEOF
 [server_cert]
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid,issuer
@@ -79,24 +93,24 @@ IP.1 = 127.0.0.1
 SRVEOF
 
 openssl x509 -req \
-    -in "$CERTS_DIR/server.csr" \
-    -CA "$CERTS_DIR/intermediate.crt" \
-    -CAkey "$CERTS_DIR/intermediate.key" \
+    -in server.csr \
+    -CA intermediate.crt \
+    -CAkey intermediate.key \
     -CAcreateserial \
     -sha256 -days 365 \
-    -extfile "$CERTS_DIR/server_ext.cnf" \
+    -extfile server_ext.cnf \
     -extensions server_cert \
-    -out "$CERTS_DIR/server.crt"
+    -out server.crt
 
 echo "=== 4/4  Building chain bundle ==="
 # chain.crt = intermediate + root (sent to clients during TLS handshake)
-cat "$CERTS_DIR/intermediate.crt" "$CERTS_DIR/rootCA.crt" > "$CERTS_DIR/chain.crt"
+cat intermediate.crt rootCA.crt > chain.crt
 
 # Clean up CSRs and temp config files
-rm -f "$CERTS_DIR"/*.csr "$CERTS_DIR"/*.cnf "$CERTS_DIR"/*.srl
+rm -f ./*.csr ./*.cnf ./*.srl
 
 echo ""
 echo "Done! Files in certs/:"
-ls -1 "$CERTS_DIR"
+ls -1
 echo ""
 echo "Next: trust certs/rootCA.crt once - see \"Trust the certificate\" in README.md."

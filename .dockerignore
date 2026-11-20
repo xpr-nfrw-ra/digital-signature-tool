@@ -1,0 +1,24 @@
+# Never ship local secrets or data in the image
+.env
+certs/
+dev.db
+dev.db-*
+*.tar
+*.tar.gz
+
+# Rebuilt inside the image
+node_modules/
+generated/
+
+# Not needed at runtime
+.git/
+.gitattributes
+.gitignore
+.vscode/
+.claude/
+.playwright-mcp/
+test/
+README.md
+ROADMAP.md
+Dockerfile
+.dockerignore
